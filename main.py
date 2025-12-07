@@ -1001,6 +1001,9 @@ class Player:
         self.is_reloading = False
         self.recoil_offset = 0  # Current recoil affecting accuracy
         self.screen_shake = 0  # Visual feedback for heavy weapons
+        self.muzzle_flash_timer = 0  # Muzzle flash effect
+        self.shell_casings = []  # Ejected shell casings
+        self.gun_kick = 0  # Visual gun kickback
 
         # Movement
         self.vx = 0
@@ -1165,6 +1168,24 @@ class Player:
         if self.screen_shake > 0:
             self.screen_shake = max(0, self.screen_shake - 20 * dt)
 
+        # Muzzle flash decay
+        if self.muzzle_flash_timer > 0:
+            self.muzzle_flash_timer -= dt
+
+        # Gun kick recovery (gun returns to position)
+        if self.gun_kick > 0:
+            self.gun_kick = max(0, self.gun_kick - 80 * dt)
+
+        # Update shell casings
+        for shell in self.shell_casings[:]:
+            shell['x'] += shell['vx'] * dt
+            shell['y'] += shell['vy'] * dt
+            shell['vy'] += 300 * dt  # Gravity
+            shell['rotation'] += shell['rot_speed'] * dt
+            shell['lifetime'] -= dt
+            if shell['lifetime'] <= 0:
+                self.shell_casings.remove(shell)
+
         # Reloading
         if self.is_reloading:
             self.reload_timer -= dt
@@ -1197,6 +1218,12 @@ class Player:
         # Add recoil from this shot (accumulates with rapid fire)
         self.recoil_offset = min(self.recoil_offset + weapon.recoil, weapon.spread * 3)
 
+        # Gun kick visual effect (gun moves back then returns)
+        self.gun_kick = min(weapon.recoil * 3, 15)
+
+        # Muzzle flash effect
+        self.muzzle_flash_timer = 0.05  # Flash lasts 50ms
+
         # Screen shake for heavy weapons
         if weapon.recoil >= 4.0:
             self.screen_shake = weapon.recoil * 2
@@ -1214,17 +1241,34 @@ class Player:
             bullet = Bullet(bx, by, bullet_angle, weapon, self.player_id)
             game_world.bullets.append(bullet)
 
-        # Muzzle flash particles
-        for _ in range(5):
+        # Muzzle flash particles (more intense)
+        flash_intensity = min(weapon.damage / 30, 3)  # Bigger guns = bigger flash
+        for _ in range(int(5 * flash_intensity)):
             angle = self.angle + random.uniform(-0.5, 0.5)
-            speed = random.uniform(100, 200)
+            speed = random.uniform(100, 300) * flash_intensity
             vx = math.cos(angle) * speed
             vy = math.sin(angle) * speed
+            color = random.choice([YELLOW, ORANGE, (255, 200, 100)])
             game_world.particles.append(Particle(
                 self.x + math.cos(self.angle) * (self.size + 15),
                 self.y + math.sin(self.angle) * (self.size + 15),
-                YELLOW, (vx, vy), random.uniform(0.1, 0.2), 4
+                color, (vx, vy), random.uniform(0.05, 0.15), random.randint(3, 6)
             ))
+
+        # Shell casing ejection (not for rockets/grenades)
+        if not weapon.explosive:
+            shell_angle = self.angle + math.pi/2 + random.uniform(-0.3, 0.3)  # Eject to the side
+            shell_speed = random.uniform(80, 150)
+            self.shell_casings.append({
+                'x': self.x + math.cos(self.angle) * self.size,
+                'y': self.y + math.sin(self.angle) * self.size,
+                'vx': math.cos(shell_angle) * shell_speed,
+                'vy': math.sin(shell_angle) * shell_speed + random.uniform(-50, 0),
+                'rotation': random.uniform(0, 360),
+                'rot_speed': random.uniform(-500, 500),
+                'lifetime': 1.0,
+                'size': 4 if 'pistol' in weapon.name.lower() or 'smg' in weapon.name.lower() else 6
+            })
 
         # Auto-reload when empty
         if self.current_ammo <= 0 and self.reserve_ammo > 0:
@@ -1316,11 +1360,35 @@ class Player:
                 (draw_x - 10, draw_y - 5), (draw_x - 5, draw_y - 3)
             ])
 
-        # Gun
-        gun_length = 30
-        gun_end_x = draw_x + math.cos(self.angle) * (self.size + gun_length)
-        gun_end_y = draw_y + math.sin(self.angle) * (self.size + gun_length)
-        pygame.draw.line(screen, DARK_GRAY, (draw_x, draw_y), (int(gun_end_x), int(gun_end_y)), 6)
+        # Draw shell casings
+        for shell in self.shell_casings:
+            shell_x = int(shell['x'] - camera_offset[0])
+            shell_y = int(shell['y'] - camera_offset[1])
+            # Draw shell as small rectangle
+            shell_color = (180, 140, 60)  # Brass color
+            pygame.draw.circle(screen, shell_color, (shell_x, shell_y), shell['size'] // 2)
+
+        # Gun with kick effect
+        gun_length = 30 - self.gun_kick  # Gun moves back when kicked
+        gun_start_x = draw_x + math.cos(self.angle) * (self.size - self.gun_kick * 0.5)
+        gun_start_y = draw_y + math.sin(self.angle) * (self.size - self.gun_kick * 0.5)
+        gun_end_x = gun_start_x + math.cos(self.angle) * gun_length
+        gun_end_y = gun_start_y + math.sin(self.angle) * gun_length
+
+        # Gun barrel (darker inner, lighter outer)
+        pygame.draw.line(screen, (40, 40, 40), (int(gun_start_x), int(gun_start_y)), (int(gun_end_x), int(gun_end_y)), 8)
+        pygame.draw.line(screen, DARK_GRAY, (int(gun_start_x), int(gun_start_y)), (int(gun_end_x), int(gun_end_y)), 5)
+
+        # Muzzle flash effect
+        if self.muzzle_flash_timer > 0:
+            flash_size = int(15 + self.current_weapon.damage / 10)
+            flash_x = int(gun_end_x + math.cos(self.angle) * 5)
+            flash_y = int(gun_end_y + math.sin(self.angle) * 5)
+            # Outer flash (orange)
+            pygame.draw.circle(screen, ORANGE, (flash_x, flash_y), flash_size)
+            # Inner flash (yellow/white)
+            pygame.draw.circle(screen, YELLOW, (flash_x, flash_y), flash_size // 2)
+            pygame.draw.circle(screen, WHITE, (flash_x, flash_y), flash_size // 4)
 
         # Health bar
         bar_width = 50
@@ -1329,11 +1397,39 @@ class Player:
         pygame.draw.rect(screen, RED, (draw_x - bar_width//2, draw_y - self.size - 15, bar_width, bar_height))
         pygame.draw.rect(screen, GREEN, (draw_x - bar_width//2, draw_y - self.size - 15, bar_width * health_ratio, bar_height))
 
-        # Reload indicator
+        # Reload animation
         if self.is_reloading:
             reload_progress = 1 - (self.reload_timer / self.current_weapon.reload_time)
+
+            # Circular progress indicator
             pygame.draw.arc(screen, YELLOW, (draw_x - 20, draw_y - 20, 40, 40),
                           -math.pi/2, -math.pi/2 + reload_progress * math.pi * 2, 3)
+
+            # Magazine animation - magazine drops and new one slides in
+            mag_offset_y = 0
+            if reload_progress < 0.3:
+                # Magazine dropping out
+                mag_offset_y = int((reload_progress / 0.3) * 20)
+                mag_alpha = int(255 * (1 - reload_progress / 0.3))
+            elif reload_progress < 0.7:
+                # No magazine visible
+                mag_offset_y = 20
+                mag_alpha = 0
+            else:
+                # New magazine sliding in
+                mag_offset_y = int(20 * (1 - (reload_progress - 0.7) / 0.3))
+                mag_alpha = int(255 * ((reload_progress - 0.7) / 0.3))
+
+            # Draw magazine
+            if mag_alpha > 50:
+                mag_x = draw_x + int(math.cos(self.angle + math.pi/2) * 8)
+                mag_y = draw_y + int(math.sin(self.angle + math.pi/2) * 8) + mag_offset_y
+                pygame.draw.rect(screen, (80, 80, 80), (mag_x - 4, mag_y - 6, 8, 12))
+
+            # "RELOADING" text
+            font = pygame.font.Font(None, 18)
+            reload_text = font.render("RELOADING", True, YELLOW)
+            screen.blit(reload_text, (draw_x - reload_text.get_width()//2, draw_y - self.size - 30))
 
         # Player ID
         font = pygame.font.Font(None, 20)
