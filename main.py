@@ -49,6 +49,16 @@ LIGHT_BLUE = (135, 206, 235)
 DARK_RED = (139, 0, 0)
 ZOMBIE_GREEN = (50, 120, 50)
 
+# Detect touch/mobile
+IS_MOBILE = False
+try:
+    # Check if running in browser (Pygbag)
+    import platform
+    if platform.system() == 'Emscripten':
+        IS_MOBILE = True
+except:
+    pass
+
 # Game States
 class GameState(Enum):
     MENU = 1
@@ -349,6 +359,99 @@ WEAPONS = {
         range=400
     ),
 }
+
+
+class VirtualJoystick:
+    """Virtual joystick for touch controls."""
+    def __init__(self, x, y, radius=80):
+        self.base_x = x
+        self.base_y = y
+        self.radius = radius
+        self.knob_radius = radius // 2
+        self.knob_x = x
+        self.knob_y = y
+        self.active = False
+        self.touch_id = None
+
+    def handle_touch_down(self, touch_id, x, y):
+        dist = math.sqrt((x - self.base_x)**2 + (y - self.base_y)**2)
+        if dist < self.radius * 1.5:
+            self.active = True
+            self.touch_id = touch_id
+            self.update_knob(x, y)
+            return True
+        return False
+
+    def handle_touch_move(self, touch_id, x, y):
+        if self.active and self.touch_id == touch_id:
+            self.update_knob(x, y)
+            return True
+        return False
+
+    def handle_touch_up(self, touch_id):
+        if self.touch_id == touch_id:
+            self.active = False
+            self.touch_id = None
+            self.knob_x = self.base_x
+            self.knob_y = self.base_y
+            return True
+        return False
+
+    def update_knob(self, x, y):
+        dx = x - self.base_x
+        dy = y - self.base_y
+        dist = math.sqrt(dx**2 + dy**2)
+        if dist > self.radius:
+            dx = dx / dist * self.radius
+            dy = dy / dist * self.radius
+        self.knob_x = self.base_x + dx
+        self.knob_y = self.base_y + dy
+
+    def get_direction(self):
+        dx = (self.knob_x - self.base_x) / self.radius
+        dy = (self.knob_y - self.base_y) / self.radius
+        return dx, dy
+
+    def draw(self, screen):
+        # Draw base circle
+        pygame.draw.circle(screen, (100, 100, 100, 128), (int(self.base_x), int(self.base_y)), self.radius, 3)
+        # Draw knob
+        pygame.draw.circle(screen, (200, 200, 200), (int(self.knob_x), int(self.knob_y)), self.knob_radius)
+        pygame.draw.circle(screen, WHITE, (int(self.knob_x), int(self.knob_y)), self.knob_radius, 2)
+
+
+class TouchButton:
+    """Touch button for mobile controls."""
+    def __init__(self, x, y, radius, label, color=GRAY):
+        self.x = x
+        self.y = y
+        self.radius = radius
+        self.label = label
+        self.color = color
+        self.pressed = False
+        self.touch_id = None
+
+    def handle_touch_down(self, touch_id, x, y):
+        dist = math.sqrt((x - self.x)**2 + (y - self.y)**2)
+        if dist < self.radius:
+            self.pressed = True
+            self.touch_id = touch_id
+            return True
+        return False
+
+    def handle_touch_up(self, touch_id):
+        if self.touch_id == touch_id:
+            self.pressed = False
+            self.touch_id = None
+            return True
+        return False
+
+    def draw(self, screen, font):
+        color = WHITE if self.pressed else self.color
+        pygame.draw.circle(screen, color, (int(self.x), int(self.y)), self.radius)
+        pygame.draw.circle(screen, WHITE, (int(self.x), int(self.y)), self.radius, 3)
+        text = font.render(self.label, True, BLACK if self.pressed else WHITE)
+        screen.blit(text, (self.x - text.get_width()//2, self.y - text.get_height()//2))
 
 
 class Particle:
@@ -1456,6 +1559,16 @@ class Game:
         self.ip_input = ""
         self.ip_active = False
 
+        # Touch controls
+        self.touch_enabled = True  # Always enable for web
+        self.move_joystick = VirtualJoystick(120, SCREEN_HEIGHT - 120, 80)
+        self.aim_joystick = VirtualJoystick(SCREEN_WIDTH - 120, SCREEN_HEIGHT - 120, 80)
+        self.shoot_button = TouchButton(SCREEN_WIDTH - 120, SCREEN_HEIGHT - 250, 50, "FIRE", RED)
+        self.ability_button = TouchButton(SCREEN_WIDTH - 220, SCREEN_HEIGHT - 120, 40, "Z", BLUE)
+        self.weapon_prev_button = TouchButton(SCREEN_WIDTH - 300, SCREEN_HEIGHT - 200, 35, "Q", ORANGE)
+        self.weapon_next_button = TouchButton(SCREEN_WIDTH - 220, SCREEN_HEIGHT - 200, 35, "E", ORANGE)
+        self.reload_button = TouchButton(120, SCREEN_HEIGHT - 220, 35, "R", YELLOW)
+
     def reset_game(self):
         self.world = GameWorld()
         self.local_players = []
@@ -1493,6 +1606,25 @@ class Game:
             elif event.key == pygame.K_ESCAPE:
                 self.running = False
 
+        # Touch/click support for menu
+        elif event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.FINGERDOWN:
+            if event.type == pygame.FINGERDOWN:
+                x = event.x * SCREEN_WIDTH
+                y = event.y * SCREEN_HEIGHT
+            else:
+                x, y = event.pos
+
+            # Check menu option clicks (based on draw_menu positions)
+            if 300 <= y <= 345:
+                self.num_local_players = 1
+                self.state = GameState.CLASS_SELECT
+            elif 345 <= y <= 390:
+                self.num_local_players = 2
+                self.state = GameState.CLASS_SELECT
+            elif 390 <= y <= 435:
+                self.num_local_players = 3
+                self.state = GameState.CLASS_SELECT
+
     def handle_class_select_events(self, event):
         if event.type == pygame.KEYDOWN:
             # Player 1 controls (WASD + Space)
@@ -1527,6 +1659,31 @@ class Game:
 
             if event.key == pygame.K_ESCAPE:
                 self.state = GameState.MENU
+
+        # Touch/click support for class selection
+        elif event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.FINGERDOWN:
+            if event.type == pygame.FINGERDOWN:
+                x = event.x * SCREEN_WIDTH
+                y = event.y * SCREEN_HEIGHT
+            else:
+                x, y = event.pos
+
+            # Class boxes are at y=180 with height=250, width=300 each
+            box_width = 300
+            start_x = (SCREEN_WIDTH - box_width * 4 - 60) // 2
+
+            if 180 <= y <= 430:
+                for i in range(4):
+                    box_x = start_x + i * (box_width + 20)
+                    if box_x <= x <= box_x + box_width:
+                        self.selected_class[0] = PlayerClass(i + 1)
+                        self.class_confirmed[0] = True
+                        break
+
+            # Check if all players confirmed
+            if all(self.class_confirmed[:self.num_local_players]):
+                self.reset_game()
+                self.state = GameState.PLAYING
 
     def handle_host_events(self, event):
         if event.type == pygame.KEYDOWN:
@@ -1631,6 +1788,50 @@ class Game:
                 player = self.local_players[0]
                 player.switch_weapon(event.y)
 
+        # Touch events (FINGERDOWN, FINGERUP, FINGERMOTION)
+        elif event.type == pygame.FINGERDOWN:
+            x = event.x * SCREEN_WIDTH
+            y = event.y * SCREEN_HEIGHT
+            touch_id = event.finger_id
+
+            # Check joysticks and buttons
+            self.move_joystick.handle_touch_down(touch_id, x, y)
+            self.aim_joystick.handle_touch_down(touch_id, x, y)
+            self.shoot_button.handle_touch_down(touch_id, x, y)
+            self.ability_button.handle_touch_down(touch_id, x, y)
+            self.weapon_prev_button.handle_touch_down(touch_id, x, y)
+            self.weapon_next_button.handle_touch_down(touch_id, x, y)
+            self.reload_button.handle_touch_down(touch_id, x, y)
+
+            # Handle button actions on press
+            if len(self.local_players) > 0:
+                player = self.local_players[0]
+                if self.ability_button.pressed:
+                    player.use_ability(self.world)
+                if self.weapon_prev_button.pressed:
+                    player.switch_weapon(-1)
+                if self.weapon_next_button.pressed:
+                    player.switch_weapon(1)
+                if self.reload_button.pressed:
+                    player.start_reload()
+
+        elif event.type == pygame.FINGERUP:
+            touch_id = event.finger_id
+            self.move_joystick.handle_touch_up(touch_id)
+            self.aim_joystick.handle_touch_up(touch_id)
+            self.shoot_button.handle_touch_up(touch_id)
+            self.ability_button.handle_touch_up(touch_id)
+            self.weapon_prev_button.handle_touch_up(touch_id)
+            self.weapon_next_button.handle_touch_up(touch_id)
+            self.reload_button.handle_touch_up(touch_id)
+
+        elif event.type == pygame.FINGERMOTION:
+            x = event.x * SCREEN_WIDTH
+            y = event.y * SCREEN_HEIGHT
+            touch_id = event.finger_id
+            self.move_joystick.handle_touch_move(touch_id, x, y)
+            self.aim_joystick.handle_touch_move(touch_id, x, y)
+
     def handle_paused_events(self, event):
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
@@ -1652,6 +1853,33 @@ class Game:
             mouse_pos = pygame.mouse.get_pos()
             for player in self.local_players:
                 player.mouse_pos = mouse_pos
+
+            # Handle touch controls for player 1
+            if self.touch_enabled and len(self.local_players) > 0:
+                player = self.local_players[0]
+
+                # Movement from left joystick
+                if self.move_joystick.active:
+                    dx, dy = self.move_joystick.get_direction()
+                    player.x += dx * player.speed * dt
+                    player.y += dy * player.speed * dt
+                    # Keep in bounds
+                    player.x = max(player.size, min(self.world.width - player.size, player.x))
+                    player.y = max(player.size, min(self.world.height - player.size, player.y))
+
+                # Aiming from right joystick
+                if self.aim_joystick.active:
+                    dx, dy = self.aim_joystick.get_direction()
+                    if abs(dx) > 0.1 or abs(dy) > 0.1:
+                        player.angle = math.atan2(dy, dx)
+
+                # Shooting from shoot button
+                if self.shoot_button.pressed:
+                    player.mouse_buttons[0] = True
+                else:
+                    # Only disable if no mouse click either
+                    if not pygame.mouse.get_pressed()[0]:
+                        player.mouse_buttons[0] = False
 
             # Update world
             self.world.update(dt)
@@ -1927,6 +2155,16 @@ class Game:
         pygame.draw.line(self.screen, WHITE, (mouse_pos[0] + 5, mouse_pos[1]), (mouse_pos[0] + 15, mouse_pos[1]), 2)
         pygame.draw.line(self.screen, WHITE, (mouse_pos[0], mouse_pos[1] - 15), (mouse_pos[0], mouse_pos[1] - 5), 2)
         pygame.draw.line(self.screen, WHITE, (mouse_pos[0], mouse_pos[1] + 5), (mouse_pos[0], mouse_pos[1] + 15), 2)
+
+        # Draw touch controls
+        if self.touch_enabled:
+            self.move_joystick.draw(self.screen)
+            self.aim_joystick.draw(self.screen)
+            self.shoot_button.draw(self.screen, self.font_small)
+            self.ability_button.draw(self.screen, self.font_small)
+            self.weapon_prev_button.draw(self.screen, self.font_small)
+            self.weapon_next_button.draw(self.screen, self.font_small)
+            self.reload_button.draw(self.screen, self.font_small)
 
     def draw_paused(self):
         # Semi-transparent overlay
