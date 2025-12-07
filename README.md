@@ -13,10 +13,10 @@ A wave-based zombie survival game with 4 unique classes, realistic weapons, and 
 - **Healer** - Creates healing zones for teammates (HP: 90)
 - **Tank** - Heavy firepower with explosive weapons (HP: 180)
 
-### Realistic Weapons
-- M1911 Pistol, M4 Carbine, Barrett M82 Sniper
-- Remington 870 Shotgun, MP5 SMG
-- RPG-7, M32 Grenade Launcher, M134 Minigun
+### Weapons
+- Pistol, Assault Rifle, Sniper Rifle
+- Pump Shotgun, SMG
+- Rocket Launcher, Grenade Launcher, Minigun
 
 ### Wave System
 - Progressive difficulty with 4 zombie types
@@ -40,8 +40,8 @@ A wave-based zombie survival game with 4 unique classes, realistic weapons, and 
 | Aim | Mouse |
 | Shoot | Left Click |
 | Reload | R |
-| Class Ability | Q |
-| Change Class | E (in bunker) |
+| Class Ability | Z |
+| Change Class | B (in bunker) |
 | Switch Weapons | 1-4 or Scroll |
 | Pause | ESC |
 

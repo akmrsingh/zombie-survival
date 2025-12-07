@@ -100,24 +100,24 @@ class WeaponStats:
 # Realistic weapon definitions based on real firearms
 WEAPONS = {
     # === PISTOLS ===
-    # M1911 - .45 ACP, 7+1 rounds, ~850 fps muzzle velocity
+    # Heavy pistol - large caliber, 7+1 rounds
     "pistol": WeaponStats(
-        name="M1911 .45 ACP",
-        damage=35,  # .45 ACP hits hard
-        fire_rate=2.5,  # semi-auto, ~150 RPM realistic
+        name="Heavy Pistol",
+        damage=35,  # Large caliber hits hard
+        fire_rate=2.5,  # semi-auto
         reload_time=2.1,  # mag change + chamber
         mag_size=7,
         max_ammo=49,  # 7 mags
         bullet_speed=25,
-        spread=2.5,  # 2.5 MOA accuracy
-        recoil=2.5,  # heavy recoil for .45
-        caliber=".45 ACP",
+        spread=2.5,
+        recoil=2.5,  # heavy recoil
+        caliber="Large",
         range=500
     ),
 
-    # Glock 17 - 9mm, 17+1 rounds
+    # Standard pistol - 17+1 rounds
     "glock": WeaponStats(
-        name="Glock 17 9mm",
+        name="Pistol",
         damage=25,
         fire_rate=3.5,  # faster follow-up shots
         reload_time=1.8,
@@ -125,32 +125,32 @@ WEAPONS = {
         max_ammo=85,
         bullet_speed=28,
         spread=2.0,
-        recoil=1.5,  # lighter recoil than .45
-        caliber="9mm",
+        recoil=1.5,  # lighter recoil
+        caliber="Standard",
         range=500
     ),
 
     # === RIFLES ===
-    # M4A1 Carbine - 5.56 NATO, 30 rounds, ~2970 fps
+    # Assault rifle - 30 rounds, full auto
     "rifle": WeaponStats(
-        name="M4A1 5.56mm",
+        name="Assault Rifle",
         damage=40,
         fire_rate=12.5,  # 750 RPM full auto
         reload_time=2.5,  # tactical reload
         mag_size=30,
         max_ammo=150,
         bullet_speed=45,
-        spread=1.5,  # 1.5 MOA
+        spread=1.5,
         recoil=2.0,
         penetration=2,  # can hit 2 enemies
-        caliber="5.56 NATO",
+        caliber="Rifle",
         range=800
     ),
 
-    # AK-47 - 7.62x39mm, 30 rounds, harder hitting but less accurate
+    # Heavy assault rifle - harder hitting but less accurate
     "ak47": WeaponStats(
-        name="AK-47 7.62mm",
-        damage=48,  # 7.62 hits harder
+        name="Heavy Rifle",
+        damage=48,  # hits harder
         fire_rate=10.0,  # 600 RPM
         reload_time=2.8,
         mag_size=30,
@@ -159,30 +159,30 @@ WEAPONS = {
         spread=3.5,  # less accurate
         recoil=3.5,  # heavy recoil
         penetration=2,
-        caliber="7.62x39mm",
+        caliber="Heavy Rifle",
         range=700
     ),
 
     # === SNIPER RIFLES ===
-    # Barrett M82 - .50 BMG, 10 rounds, devastating
+    # Anti-material rifle - devastating power
     "sniper": WeaponStats(
-        name="Barrett M82 .50",
-        damage=200,  # .50 BMG is devastating
+        name="Sniper Rifle",
+        damage=200,  # Devastating power
         fire_rate=0.5,  # semi-auto, slow
         reload_time=4.0,  # heavy mag
         mag_size=10,
         max_ammo=30,
         bullet_speed=60,
-        spread=0.3,  # sub-MOA accuracy
+        spread=0.3,  # very accurate
         recoil=5.0,  # massive recoil
         penetration=3,  # can hit 3 enemies
-        caliber=".50 BMG",
+        caliber="Anti-Material",
         range=1500
     ),
 
-    # SVD Dragunov - 7.62x54R
+    # Marksman rifle
     "svd": WeaponStats(
-        name="SVD Dragunov",
+        name="Marksman Rifle",
         damage=90,
         fire_rate=1.0,
         reload_time=3.0,
@@ -192,14 +192,14 @@ WEAPONS = {
         spread=0.8,
         recoil=3.0,
         penetration=2,
-        caliber="7.62x54R",
+        caliber="Marksman",
         range=1200
     ),
 
     # === SHOTGUNS ===
-    # Remington 870 - 12 gauge, pump action
+    # Pump shotgun - 12 gauge
     "shotgun": WeaponStats(
-        name="Remington 870",
+        name="Pump Shotgun",
         damage=18,  # per pellet, 8 pellets = 144 max
         fire_rate=1.0,  # pump action
         reload_time=0.5,  # per shell
@@ -209,13 +209,13 @@ WEAPONS = {
         spread=12,  # wide spread
         bullet_count=8,  # 8 pellets
         recoil=4.0,
-        caliber="12 Gauge",
+        caliber="Buckshot",
         range=300
     ),
 
-    # SPAS-12 - Semi-auto shotgun
+    # Auto shotgun
     "spas12": WeaponStats(
-        name="SPAS-12 Auto",
+        name="Auto Shotgun",
         damage=15,
         fire_rate=2.5,  # semi-auto faster
         reload_time=3.5,
@@ -225,14 +225,14 @@ WEAPONS = {
         spread=14,
         bullet_count=9,
         recoil=3.5,
-        caliber="12 Gauge",
+        caliber="Buckshot",
         range=250
     ),
 
     # === SMGs ===
-    # MP5 - 9mm, 30 rounds, accurate SMG
+    # Tactical SMG - accurate
     "smg": WeaponStats(
-        name="MP5 9mm",
+        name="SMG",
         damage=22,
         fire_rate=13.3,  # 800 RPM
         reload_time=2.0,
@@ -241,13 +241,13 @@ WEAPONS = {
         bullet_speed=30,
         spread=3.0,
         recoil=1.2,  # low recoil
-        caliber="9mm",
+        caliber="Compact",
         range=400
     ),
 
-    # P90 - 5.7x28mm, 50 rounds
+    # PDW - high capacity
     "p90": WeaponStats(
-        name="P90 5.7mm",
+        name="PDW",
         damage=20,
         fire_rate=15.0,  # 900 RPM
         reload_time=2.3,
@@ -257,14 +257,14 @@ WEAPONS = {
         spread=2.5,
         recoil=1.0,  # very low recoil
         penetration=2,  # armor piercing
-        caliber="5.7x28mm",
+        caliber="AP Compact",
         range=450
     ),
 
     # === HEAVY WEAPONS ===
-    # RPG-7 - Explosive
+    # Rocket launcher
     "rpg": WeaponStats(
-        name="RPG-7",
+        name="Rocket Launcher",
         damage=150,
         fire_rate=0.3,  # slow reload
         reload_time=5.0,
@@ -275,13 +275,13 @@ WEAPONS = {
         explosive=True,
         explosion_radius=120,
         recoil=6.0,
-        caliber="40mm HEAT",
+        caliber="Rocket",
         range=600
     ),
 
-    # M32 MGL - 40mm grenade launcher
+    # Grenade launcher
     "grenade_launcher": WeaponStats(
-        name="M32 MGL 40mm",
+        name="Grenade Launcher",
         damage=100,
         fire_rate=1.5,
         reload_time=4.5,
@@ -292,13 +292,13 @@ WEAPONS = {
         explosive=True,
         explosion_radius=90,
         recoil=4.0,
-        caliber="40mm Grenade",
+        caliber="Grenade",
         range=500
     ),
 
-    # M134 Minigun - 7.62 NATO, 3000 RPM
+    # Rotary cannon
     "minigun": WeaponStats(
-        name="M134 Minigun",
+        name="Minigun",
         damage=30,
         fire_rate=50.0,  # 3000 RPM
         reload_time=6.0,  # belt fed, long reload
@@ -308,7 +308,7 @@ WEAPONS = {
         spread=6.0,  # less accurate due to spin-up
         recoil=0.5,  # mounted, low felt recoil
         penetration=2,
-        caliber="7.62 NATO",
+        caliber="Heavy",
         range=700
     ),
 
@@ -765,15 +765,17 @@ class Zombie:
         nearest_target = None
         target_type = None
 
-        # Check if commanded to attack bunker
+        # Check if commanded to attack bunker (priority target)
         should_target_bunker = getattr(self, 'target_bunker', False) or self.zombie_type == "cage_walker"
 
         if should_target_bunker and bunker and bunker.health > 0:
+            # Commanded zombies prioritize bunker
             dist = math.sqrt((bunker.x - self.x)**2 + (bunker.y - self.y)**2)
             nearest_dist = dist
             nearest_target = bunker
             target_type = "bunker"
         else:
+            # Normal zombies: find nearest player first
             for player in players:
                 if player.health > 0:
                     dist = math.sqrt((player.x - self.x)**2 + (player.y - self.y)**2)
@@ -782,7 +784,15 @@ class Zombie:
                         nearest_target = player
                         target_type = "player"
 
-        # Check walls in path
+            # If no player nearby (within 400 units), target bunker instead
+            if bunker and bunker.health > 0 and (nearest_target is None or nearest_dist > 400):
+                bunker_dist = math.sqrt((bunker.x - self.x)**2 + (bunker.y - self.y)**2)
+                if nearest_target is None or bunker_dist < nearest_dist:
+                    nearest_dist = bunker_dist
+                    nearest_target = bunker
+                    target_type = "bunker"
+
+        # Check walls in path (walls block path to target)
         for wall in walls:
             if wall.active:
                 dist = math.sqrt((wall.x - self.x)**2 + (wall.y - self.y)**2)
@@ -1384,7 +1394,7 @@ class Bunker:
 
         # Label
         font = pygame.font.Font(None, 24)
-        text = font.render("BUNKER - Press E to change class", True, WHITE)
+        text = font.render("BUNKER - Press B to change class", True, WHITE)
         screen.blit(text, (draw_rect.centerx - text.get_width()//2, draw_rect.y - 40))
 
 
@@ -1990,7 +2000,7 @@ class Game:
                     player.switch_weapon(1)   # Next weapon
                 elif event.key == pygame.K_z:
                     player.use_ability(self.world)
-                elif event.key == pygame.K_x:
+                elif event.key == pygame.K_b:
                     # Class switch in bunker
                     if self.world.bunker.is_player_inside(player):
                         self.state = GameState.CLASS_SELECT
@@ -2202,7 +2212,7 @@ class Game:
         # Instructions
         instructions = [
             "Controls (P1): WASD - Move | Mouse - Aim | LMB - Shoot",
-            "Q/E - Switch Weapons | Z - Ability | X - Change Class (in bunker)",
+            "Q/E - Switch Weapons | Z - Ability | B - Change Class (in bunker)",
             "Controls (P2): IJKL - Move | U/O - Weapons | M - Ability",
             "Controls (P3): TFGH - Move | R/Y - Weapons | V - Ability"
         ]
@@ -2410,7 +2420,7 @@ class Game:
 
         # Bunker hint
         if self.world.bunker.is_player_inside(player):
-            hint = self.font_small.render("Press X to change class", True, YELLOW)
+            hint = self.font_small.render("Press B to change class", True, YELLOW)
             self.screen.blit(hint, (SCREEN_WIDTH//2 - hint.get_width()//2, SCREEN_HEIGHT - 80))
 
         # Crosshair
