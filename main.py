@@ -68,41 +68,286 @@ class PlayerClass(Enum):
     HEALER = 3
     TANK = 4
 
-# Weapon Types
+# Weapon Types - Realistic Stats
 @dataclass
 class WeaponStats:
     name: str
     damage: int
-    fire_rate: float  # shots per second
-    reload_time: float  # seconds
+    fire_rate: float  # rounds per minute converted to shots/sec
+    reload_time: float  # seconds (realistic reload times)
     mag_size: int
     max_ammo: int
-    bullet_speed: float
-    spread: float  # degrees
+    bullet_speed: float  # meters/sec scaled for game
+    spread: float  # MOA (minutes of angle) accuracy
     bullet_count: int = 1
     explosive: bool = False
     explosion_radius: float = 0
-    range: float = 800
+    range: float = 800  # effective range in game units
+    recoil: float = 1.0  # recoil intensity (affects accuracy after shots)
+    penetration: int = 1  # how many enemies bullet can hit
+    caliber: str = "9mm"  # bullet type for display
 
-# Realistic weapon definitions
+# Realistic weapon definitions based on real firearms
 WEAPONS = {
-    # Ranger weapons
-    "pistol": WeaponStats("M1911 Pistol", 25, 3.0, 1.5, 7, 70, 20, 3),
-    "rifle": WeaponStats("M4 Carbine", 30, 8.0, 2.0, 30, 180, 25, 2),
-    "sniper": WeaponStats("Barrett M82", 150, 0.8, 3.0, 5, 25, 40, 0.5, range=1200),
-    "shotgun": WeaponStats("Remington 870", 15, 1.2, 2.5, 8, 40, 15, 15, bullet_count=8),
-    "smg": WeaponStats("MP5", 18, 12.0, 1.8, 30, 150, 18, 5),
+    # === PISTOLS ===
+    # M1911 - .45 ACP, 7+1 rounds, ~850 fps muzzle velocity
+    "pistol": WeaponStats(
+        name="M1911 .45 ACP",
+        damage=35,  # .45 ACP hits hard
+        fire_rate=2.5,  # semi-auto, ~150 RPM realistic
+        reload_time=2.1,  # mag change + chamber
+        mag_size=7,
+        max_ammo=49,  # 7 mags
+        bullet_speed=25,
+        spread=2.5,  # 2.5 MOA accuracy
+        recoil=2.5,  # heavy recoil for .45
+        caliber=".45 ACP",
+        range=500
+    ),
 
-    # Tank weapons
-    "rpg": WeaponStats("RPG-7", 100, 0.5, 4.0, 1, 10, 12, 2, explosive=True, explosion_radius=100),
-    "grenade_launcher": WeaponStats("M32 MGL", 80, 1.0, 3.5, 6, 24, 10, 3, explosive=True, explosion_radius=80),
-    "minigun": WeaponStats("M134 Minigun", 20, 30.0, 5.0, 200, 600, 22, 8),
+    # Glock 17 - 9mm, 17+1 rounds
+    "glock": WeaponStats(
+        name="Glock 17 9mm",
+        damage=25,
+        fire_rate=3.5,  # faster follow-up shots
+        reload_time=1.8,
+        mag_size=17,
+        max_ammo=85,
+        bullet_speed=28,
+        spread=2.0,
+        recoil=1.5,  # lighter recoil than .45
+        caliber="9mm",
+        range=500
+    ),
 
-    # Builder tools
-    "nail_gun": WeaponStats("Nail Gun", 10, 5.0, 1.0, 50, 200, 15, 8),
+    # === RIFLES ===
+    # M4A1 Carbine - 5.56 NATO, 30 rounds, ~2970 fps
+    "rifle": WeaponStats(
+        name="M4A1 5.56mm",
+        damage=40,
+        fire_rate=12.5,  # 750 RPM full auto
+        reload_time=2.5,  # tactical reload
+        mag_size=30,
+        max_ammo=150,
+        bullet_speed=45,
+        spread=1.5,  # 1.5 MOA
+        recoil=2.0,
+        penetration=2,  # can hit 2 enemies
+        caliber="5.56 NATO",
+        range=800
+    ),
 
-    # Healer weapons
-    "tranq_pistol": WeaponStats("Tranq Pistol", 15, 2.0, 1.5, 10, 50, 12, 5),
+    # AK-47 - 7.62x39mm, 30 rounds, harder hitting but less accurate
+    "ak47": WeaponStats(
+        name="AK-47 7.62mm",
+        damage=48,  # 7.62 hits harder
+        fire_rate=10.0,  # 600 RPM
+        reload_time=2.8,
+        mag_size=30,
+        max_ammo=120,
+        bullet_speed=40,
+        spread=3.5,  # less accurate
+        recoil=3.5,  # heavy recoil
+        penetration=2,
+        caliber="7.62x39mm",
+        range=700
+    ),
+
+    # === SNIPER RIFLES ===
+    # Barrett M82 - .50 BMG, 10 rounds, devastating
+    "sniper": WeaponStats(
+        name="Barrett M82 .50",
+        damage=200,  # .50 BMG is devastating
+        fire_rate=0.5,  # semi-auto, slow
+        reload_time=4.0,  # heavy mag
+        mag_size=10,
+        max_ammo=30,
+        bullet_speed=60,
+        spread=0.3,  # sub-MOA accuracy
+        recoil=5.0,  # massive recoil
+        penetration=3,  # can hit 3 enemies
+        caliber=".50 BMG",
+        range=1500
+    ),
+
+    # SVD Dragunov - 7.62x54R
+    "svd": WeaponStats(
+        name="SVD Dragunov",
+        damage=90,
+        fire_rate=1.0,
+        reload_time=3.0,
+        mag_size=10,
+        max_ammo=50,
+        bullet_speed=50,
+        spread=0.8,
+        recoil=3.0,
+        penetration=2,
+        caliber="7.62x54R",
+        range=1200
+    ),
+
+    # === SHOTGUNS ===
+    # Remington 870 - 12 gauge, pump action
+    "shotgun": WeaponStats(
+        name="Remington 870",
+        damage=18,  # per pellet, 8 pellets = 144 max
+        fire_rate=1.0,  # pump action
+        reload_time=0.5,  # per shell
+        mag_size=8,
+        max_ammo=32,
+        bullet_speed=20,
+        spread=12,  # wide spread
+        bullet_count=8,  # 8 pellets
+        recoil=4.0,
+        caliber="12 Gauge",
+        range=300
+    ),
+
+    # SPAS-12 - Semi-auto shotgun
+    "spas12": WeaponStats(
+        name="SPAS-12 Auto",
+        damage=15,
+        fire_rate=2.5,  # semi-auto faster
+        reload_time=3.5,
+        mag_size=8,
+        max_ammo=40,
+        bullet_speed=18,
+        spread=14,
+        bullet_count=9,
+        recoil=3.5,
+        caliber="12 Gauge",
+        range=250
+    ),
+
+    # === SMGs ===
+    # MP5 - 9mm, 30 rounds, accurate SMG
+    "smg": WeaponStats(
+        name="MP5 9mm",
+        damage=22,
+        fire_rate=13.3,  # 800 RPM
+        reload_time=2.0,
+        mag_size=30,
+        max_ammo=180,
+        bullet_speed=30,
+        spread=3.0,
+        recoil=1.2,  # low recoil
+        caliber="9mm",
+        range=400
+    ),
+
+    # P90 - 5.7x28mm, 50 rounds
+    "p90": WeaponStats(
+        name="P90 5.7mm",
+        damage=20,
+        fire_rate=15.0,  # 900 RPM
+        reload_time=2.3,
+        mag_size=50,
+        max_ammo=200,
+        bullet_speed=35,
+        spread=2.5,
+        recoil=1.0,  # very low recoil
+        penetration=2,  # armor piercing
+        caliber="5.7x28mm",
+        range=450
+    ),
+
+    # === HEAVY WEAPONS ===
+    # RPG-7 - Explosive
+    "rpg": WeaponStats(
+        name="RPG-7",
+        damage=150,
+        fire_rate=0.3,  # slow reload
+        reload_time=5.0,
+        mag_size=1,
+        max_ammo=8,
+        bullet_speed=15,  # rockets are slower
+        spread=2.0,
+        explosive=True,
+        explosion_radius=120,
+        recoil=6.0,
+        caliber="40mm HEAT",
+        range=600
+    ),
+
+    # M32 MGL - 40mm grenade launcher
+    "grenade_launcher": WeaponStats(
+        name="M32 MGL 40mm",
+        damage=100,
+        fire_rate=1.5,
+        reload_time=4.5,
+        mag_size=6,
+        max_ammo=24,
+        bullet_speed=12,
+        spread=3.0,
+        explosive=True,
+        explosion_radius=90,
+        recoil=4.0,
+        caliber="40mm Grenade",
+        range=500
+    ),
+
+    # M134 Minigun - 7.62 NATO, 3000 RPM
+    "minigun": WeaponStats(
+        name="M134 Minigun",
+        damage=30,
+        fire_rate=50.0,  # 3000 RPM
+        reload_time=6.0,  # belt fed, long reload
+        mag_size=200,
+        max_ammo=600,
+        bullet_speed=42,
+        spread=6.0,  # less accurate due to spin-up
+        recoil=0.5,  # mounted, low felt recoil
+        penetration=2,
+        caliber="7.62 NATO",
+        range=700
+    ),
+
+    # === SPECIAL WEAPONS ===
+    # Nail Gun - Builder tool
+    "nail_gun": WeaponStats(
+        name="Pneumatic Nail Gun",
+        damage=12,
+        fire_rate=6.0,
+        reload_time=1.5,
+        mag_size=50,
+        max_ammo=250,
+        bullet_speed=18,
+        spread=6.0,
+        recoil=0.5,
+        caliber="3.5in Nail",
+        range=200
+    ),
+
+    # Tranquilizer Pistol
+    "tranq_pistol": WeaponStats(
+        name="Tranq Pistol",
+        damage=18,
+        fire_rate=1.5,
+        reload_time=2.0,
+        mag_size=8,
+        max_ammo=40,
+        bullet_speed=15,
+        spread=3.0,
+        recoil=1.0,
+        caliber="Tranq Dart",
+        range=350
+    ),
+
+    # Desert Eagle - .50 AE, hand cannon
+    "deagle": WeaponStats(
+        name="Desert Eagle .50",
+        damage=55,
+        fire_rate=1.8,
+        reload_time=2.3,
+        mag_size=7,
+        max_ammo=35,
+        bullet_speed=30,
+        spread=2.0,
+        recoil=5.0,  # massive recoil
+        penetration=2,
+        caliber=".50 AE",
+        range=400
+    ),
 }
 
 
@@ -133,7 +378,7 @@ class Particle:
 
 
 class Bullet:
-    """Projectile class for all weapons."""
+    """Projectile class for all weapons with realistic ballistics."""
     def __init__(self, x, y, angle, stats: WeaponStats, owner_id):
         self.x = x
         self.y = y
@@ -148,25 +393,54 @@ class Bullet:
         self.vx = math.cos(angle) * self.speed
         self.vy = math.sin(angle) * self.speed
         self.active = True
+        self.penetration = stats.penetration  # How many enemies can hit
+        self.hits = 0  # Track hits for penetration
+        self.caliber = stats.caliber
+        # Bullet drop for realism (gravity effect)
+        self.gravity = 50 if not stats.explosive else 80  # Rockets drop more
 
     def update(self, dt):
         move_dist = self.speed * dt
         self.x += self.vx * dt
         self.y += self.vy * dt
+        # Apply bullet drop (gravity)
+        self.vy += self.gravity * dt
         self.distance_traveled += move_dist
+        # Damage falloff at range
         if self.distance_traveled > self.range:
             self.active = False
         return self.active
 
+    def hit_target(self):
+        """Called when bullet hits an enemy. Returns True if bullet should continue."""
+        self.hits += 1
+        self.damage *= 0.7  # Damage reduction per penetration
+        return self.hits < self.penetration
+
     def draw(self, screen, camera_offset):
-        pygame.draw.circle(screen, YELLOW,
-                         (int(self.x - camera_offset[0]), int(self.y - camera_offset[1])), 4)
-        # Trail effect
-        trail_x = self.x - self.vx * 0.02
-        trail_y = self.y - self.vy * 0.02
-        pygame.draw.line(screen, ORANGE,
+        draw_x = int(self.x - camera_offset[0])
+        draw_y = int(self.y - camera_offset[1])
+
+        # Different bullet visuals based on caliber
+        if self.explosive:
+            # Rocket/grenade - larger, red-orange
+            pygame.draw.circle(screen, RED, (draw_x, draw_y), 6)
+            pygame.draw.circle(screen, ORANGE, (draw_x, draw_y), 4)
+        elif ".50" in self.caliber or "7.62" in self.caliber:
+            # Large caliber - bigger bullet
+            pygame.draw.circle(screen, YELLOW, (draw_x, draw_y), 5)
+        else:
+            # Standard bullet
+            pygame.draw.circle(screen, YELLOW, (draw_x, draw_y), 3)
+
+        # Trail effect - longer for faster bullets
+        trail_length = 0.03 if self.speed > 2000 else 0.02
+        trail_x = self.x - self.vx * trail_length
+        trail_y = self.y - self.vy * trail_length
+        trail_color = RED if self.explosive else ORANGE
+        pygame.draw.line(screen, trail_color,
                         (int(trail_x - camera_offset[0]), int(trail_y - camera_offset[1])),
-                        (int(self.x - camera_offset[0]), int(self.y - camera_offset[1])), 2)
+                        (draw_x, draw_y), 2)
 
 
 class Wall:
@@ -386,6 +660,8 @@ class Player:
         self.fire_cooldown = 0
         self.reload_timer = 0
         self.is_reloading = False
+        self.recoil_offset = 0  # Current recoil affecting accuracy
+        self.screen_shake = 0  # Visual feedback for heavy weapons
 
         # Movement
         self.vx = 0
@@ -410,7 +686,8 @@ class Player:
         if player_class == PlayerClass.BUILDER:
             self.max_health = 120
             self.speed = 200
-            self.weapons = [WEAPONS["nail_gun"], WEAPONS["pistol"]]
+            # Builder: Nail gun + sidearm
+            self.weapons = [WEAPONS["nail_gun"], WEAPONS["glock"]]
             self.color = ORANGE
             self.ability_max_cooldown = 3  # Wall building cooldown
             self.max_walls = 10
@@ -418,21 +695,40 @@ class Player:
         elif player_class == PlayerClass.RANGER:
             self.max_health = 100
             self.speed = 220
-            self.weapons = [WEAPONS["rifle"], WEAPONS["pistol"], WEAPONS["shotgun"], WEAPONS["sniper"]]
+            # Ranger: Full weapon arsenal
+            self.weapons = [
+                WEAPONS["rifle"],      # M4A1 - Primary
+                WEAPONS["ak47"],       # AK-47 - Alt rifle
+                WEAPONS["shotgun"],    # Remington 870
+                WEAPONS["sniper"],     # Barrett M82
+                WEAPONS["pistol"],     # M1911 backup
+            ]
             self.color = GREEN
-            self.ability_max_cooldown = 15  # Rapid fire mode
+            self.ability_max_cooldown = 15  # Speed boost
 
         elif player_class == PlayerClass.HEALER:
             self.max_health = 90
             self.speed = 210
-            self.weapons = [WEAPONS["tranq_pistol"], WEAPONS["smg"]]
+            # Healer: SMGs and pistol
+            self.weapons = [
+                WEAPONS["smg"],        # MP5
+                WEAPONS["p90"],        # P90 with armor piercing
+                WEAPONS["tranq_pistol"],
+            ]
             self.color = LIGHT_BLUE
             self.ability_max_cooldown = 12  # Heal zone
 
         elif player_class == PlayerClass.TANK:
             self.max_health = 180
             self.speed = 140
-            self.weapons = [WEAPONS["minigun"], WEAPONS["rpg"], WEAPONS["grenade_launcher"]]
+            # Tank: Heavy weapons + Desert Eagle
+            self.weapons = [
+                WEAPONS["minigun"],         # M134 Minigun
+                WEAPONS["rpg"],             # RPG-7
+                WEAPONS["grenade_launcher"], # M32 MGL
+                WEAPONS["spas12"],          # SPAS-12 shotgun
+                WEAPONS["deagle"],          # Desert Eagle backup
+            ]
             self.color = RED
             self.ability_max_cooldown = 20  # Ground slam
 
@@ -518,6 +814,14 @@ class Player:
         self.fire_cooldown -= dt
         self.ability_cooldown -= dt
 
+        # Recoil recovery (accuracy returns to normal over time)
+        if self.recoil_offset > 0:
+            self.recoil_offset = max(0, self.recoil_offset - 15 * dt)
+
+        # Screen shake decay
+        if self.screen_shake > 0:
+            self.screen_shake = max(0, self.screen_shake - 20 * dt)
+
         # Reloading
         if self.is_reloading:
             self.reload_timer -= dt
@@ -544,9 +848,19 @@ class Player:
         self.current_ammo -= 1
         self.fire_cooldown = 1.0 / weapon.fire_rate
 
+        # Apply recoil to spread - accuracy degrades with rapid fire
+        effective_spread = weapon.spread + self.recoil_offset
+
+        # Add recoil from this shot (accumulates with rapid fire)
+        self.recoil_offset = min(self.recoil_offset + weapon.recoil, weapon.spread * 3)
+
+        # Screen shake for heavy weapons
+        if weapon.recoil >= 4.0:
+            self.screen_shake = weapon.recoil * 2
+
         # Create bullets
         for _ in range(weapon.bullet_count):
-            spread = math.radians(random.uniform(-weapon.spread, weapon.spread))
+            spread = math.radians(random.uniform(-effective_spread, effective_spread))
             bullet_angle = self.angle + spread
 
             # Bullet starts at gun position
@@ -827,14 +1141,22 @@ class GameWorld:
                 self.bullets.remove(bullet)
                 continue
 
+            # Track which zombies this bullet already hit (for penetration)
+            if not hasattr(bullet, 'hit_zombies'):
+                bullet.hit_zombies = set()
+
             # Check zombie collisions
             for zombie in self.zombies[:]:
+                # Skip if already hit this zombie
+                if id(zombie) in bullet.hit_zombies:
+                    continue
+
                 dist = math.sqrt((bullet.x - zombie.x)**2 + (bullet.y - zombie.y)**2)
                 if dist < zombie.size + 5:
                     angle = math.atan2(bullet.vy, bullet.vx)
 
                     if bullet.explosive:
-                        # Explosion damage
+                        # Explosion damage - hits all nearby zombies
                         for z in self.zombies:
                             exp_dist = math.sqrt((bullet.x - z.x)**2 + (bullet.y - z.y)**2)
                             if exp_dist < bullet.explosion_radius:
@@ -853,7 +1175,14 @@ class GameWorld:
                                 (math.cos(p_angle) * p_speed, math.sin(p_angle) * p_speed),
                                 random.uniform(0.3, 0.6), 8
                             ))
+
+                        # Explosives always stop on impact
+                        bullet.active = False
+                        if bullet in self.bullets:
+                            self.bullets.remove(bullet)
+                        break
                     else:
+                        # Regular bullet with penetration
                         if zombie.take_damage(bullet.damage, angle):
                             self.kills += 1
                             self.score += 100
@@ -868,18 +1197,25 @@ class GameWorld:
                                 random.uniform(0.2, 0.4), 4
                             ))
 
-                    bullet.active = False
-                    if bullet in self.bullets:
-                        self.bullets.remove(bullet)
-                    break
+                        # Mark this zombie as hit
+                        bullet.hit_zombies.add(id(zombie))
 
-            # Check wall collisions
-            for wall in self.walls:
-                if wall.active and wall.get_rect().collidepoint(bullet.x, bullet.y):
-                    bullet.active = False
-                    if bullet in self.bullets:
-                        self.bullets.remove(bullet)
-                    break
+                        # Check if bullet can continue (penetration)
+                        if not bullet.hit_target():
+                            # Bullet exhausted penetration
+                            bullet.active = False
+                            if bullet in self.bullets:
+                                self.bullets.remove(bullet)
+                            break
+
+            # Check wall collisions (walls always stop bullets)
+            if bullet.active:
+                for wall in self.walls:
+                    if wall.active and wall.get_rect().collidepoint(bullet.x, bullet.y):
+                        bullet.active = False
+                        if bullet in self.bullets:
+                            self.bullets.remove(bullet)
+                        break
 
         # Update walls
         for wall in self.walls[:]:
