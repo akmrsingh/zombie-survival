@@ -445,7 +445,7 @@ class Bullet:
 
 class Wall:
     """Buildable wall for Builder class."""
-    def __init__(self, x, y, width=80, height=20, health=200):
+    def __init__(self, x, y, width=320, height=80, health=400):
         self.x = x
         self.y = y
         self.width = width
@@ -761,14 +761,14 @@ class Player:
         move_x = 0
         move_y = 0
 
-        # P1: WASD/Arrows, P2: IJKL
-        if pygame.K_w in self.keys_pressed or pygame.K_UP in self.keys_pressed or pygame.K_i in self.keys_pressed:
+        # P1: WASD/Arrows, P2: IJKL, P3: TFGH
+        if pygame.K_w in self.keys_pressed or pygame.K_UP in self.keys_pressed or pygame.K_i in self.keys_pressed or pygame.K_t in self.keys_pressed:
             move_y -= 1
-        if pygame.K_s in self.keys_pressed or pygame.K_DOWN in self.keys_pressed or pygame.K_k in self.keys_pressed:
+        if pygame.K_s in self.keys_pressed or pygame.K_DOWN in self.keys_pressed or pygame.K_k in self.keys_pressed or pygame.K_g in self.keys_pressed:
             move_y += 1
-        if pygame.K_a in self.keys_pressed or pygame.K_LEFT in self.keys_pressed or pygame.K_j in self.keys_pressed:
+        if pygame.K_a in self.keys_pressed or pygame.K_LEFT in self.keys_pressed or pygame.K_j in self.keys_pressed or pygame.K_f in self.keys_pressed:
             move_x -= 1
-        if pygame.K_d in self.keys_pressed or pygame.K_RIGHT in self.keys_pressed or pygame.K_l in self.keys_pressed:
+        if pygame.K_d in self.keys_pressed or pygame.K_RIGHT in self.keys_pressed or pygame.K_l in self.keys_pressed or pygame.K_h in self.keys_pressed:
             move_x += 1
 
         # Normalize diagonal movement
@@ -1485,9 +1485,6 @@ class Game:
             elif event.key == pygame.K_3:
                 self.num_local_players = 3
                 self.state = GameState.CLASS_SELECT
-            elif event.key == pygame.K_4:
-                self.num_local_players = 4
-                self.state = GameState.CLASS_SELECT
             elif event.key == pygame.K_h:
                 self.state = GameState.HOST_GAME
             elif event.key == pygame.K_j:
@@ -1561,53 +1558,46 @@ class Game:
             if event.key == pygame.K_ESCAPE:
                 self.state = GameState.PAUSED
 
-            # Player 1 controls
+            # Player 1 controls (WASD movement, Q/E weapons, Z ability)
             if len(self.local_players) > 0:
                 player = self.local_players[0]
                 player.keys_pressed.add(event.key)
 
-                if event.key == pygame.K_r:
-                    player.start_reload()
-                elif event.key == pygame.K_q:
-                    player.use_ability(self.world)
-                elif event.key == pygame.K_1:
-                    if len(player.weapons) > 0:
-                        player.current_weapon_index = 0
-                        player.current_ammo = player.weapons[0].mag_size
-                        player.reserve_ammo = player.weapons[0].max_ammo
-                elif event.key == pygame.K_2:
-                    if len(player.weapons) > 1:
-                        player.current_weapon_index = 1
-                        player.current_ammo = player.weapons[1].mag_size
-                        player.reserve_ammo = player.weapons[1].max_ammo
-                elif event.key == pygame.K_3:
-                    if len(player.weapons) > 2:
-                        player.current_weapon_index = 2
-                        player.current_ammo = player.weapons[2].mag_size
-                        player.reserve_ammo = player.weapons[2].max_ammo
-                elif event.key == pygame.K_4:
-                    if len(player.weapons) > 3:
-                        player.current_weapon_index = 3
-                        player.current_ammo = player.weapons[3].mag_size
-                        player.reserve_ammo = player.weapons[3].max_ammo
+                if event.key == pygame.K_q:
+                    player.switch_weapon(-1)  # Previous weapon
                 elif event.key == pygame.K_e:
+                    player.switch_weapon(1)   # Next weapon
+                elif event.key == pygame.K_z:
+                    player.use_ability(self.world)
+                elif event.key == pygame.K_x:
                     # Class switch in bunker
                     if self.world.bunker.is_player_inside(player):
                         self.state = GameState.CLASS_SELECT
-                        self.class_confirmed = [False] * 4
+                        self.class_confirmed = [False] * 3
 
-            # Player 2 controls (IJKL + U for ability, O for reload)
+            # Player 2 controls (IJKL movement, U/O weapons, M ability)
             if len(self.local_players) > 1:
                 player2 = self.local_players[1]
-                # IJKL movement
                 if event.key in [pygame.K_i, pygame.K_j, pygame.K_k, pygame.K_l]:
                     player2.keys_pressed.add(event.key)
-                elif event.key == pygame.K_o:
-                    player2.start_reload()
                 elif event.key == pygame.K_u:
+                    player2.switch_weapon(-1)  # Previous weapon
+                elif event.key == pygame.K_o:
+                    player2.switch_weapon(1)   # Next weapon
+                elif event.key == pygame.K_m:
                     player2.use_ability(self.world)
-                elif event.key == pygame.K_p:
-                    player2.switch_weapon(1)
+
+            # Player 3 controls (TFGH movement, R/Y weapons, V ability)
+            if len(self.local_players) > 2:
+                player3 = self.local_players[2]
+                if event.key in [pygame.K_t, pygame.K_f, pygame.K_g, pygame.K_h]:
+                    player3.keys_pressed.add(event.key)
+                elif event.key == pygame.K_r:
+                    player3.switch_weapon(-1)  # Previous weapon
+                elif event.key == pygame.K_y:
+                    player3.switch_weapon(1)   # Next weapon
+                elif event.key == pygame.K_v:
+                    player3.use_ability(self.world)
 
         elif event.type == pygame.KEYUP:
             if len(self.local_players) > 0:
@@ -1618,6 +1608,11 @@ class Game:
             if len(self.local_players) > 1:
                 player2 = self.local_players[1]
                 player2.keys_pressed.discard(event.key)
+
+            # Player 3 key up
+            if len(self.local_players) > 2:
+                player3 = self.local_players[2]
+                player3.keys_pressed.discard(event.key)
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if len(self.local_players) > 0:
@@ -1645,9 +1640,9 @@ class Game:
 
     def handle_game_over_events(self, event):
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE:
+            if event.key == pygame.K_r:
                 self.state = GameState.CLASS_SELECT
-                self.class_confirmed = [False] * 4
+                self.class_confirmed = [False] * 3
             elif event.key == pygame.K_ESCAPE:
                 self.state = GameState.MENU
 
@@ -1695,7 +1690,6 @@ class Game:
             ("Press 1 - Single Player", WHITE),
             ("Press 2 - 2 Player Local", WHITE),
             ("Press 3 - 3 Player Local", WHITE),
-            ("Press 4 - 4 Player Local", WHITE),
             ("", WHITE),
             ("Press H - Host Online Game" + ("" if NETWORK_AVAILABLE else " (Desktop only)"),
              WHITE if NETWORK_AVAILABLE else GRAY),
@@ -1714,10 +1708,10 @@ class Game:
 
         # Instructions
         instructions = [
-            "Controls:",
-            "WASD/Arrows - Move | Mouse - Aim | LMB - Shoot",
-            "R - Reload | Q - Class Ability | E - Change Class (in bunker)",
-            "1-4 - Switch Weapons | Scroll - Cycle Weapons"
+            "Controls (P1): WASD - Move | Mouse - Aim | LMB - Shoot",
+            "Q/E - Switch Weapons | Z - Ability | X - Change Class (in bunker)",
+            "Controls (P2): IJKL - Move | U/O - Weapons | M - Ability",
+            "Controls (P3): TFGH - Move | R/Y - Weapons | V - Ability"
         ]
         y = SCREEN_HEIGHT - 150
         for inst in instructions:
@@ -1872,7 +1866,7 @@ class Game:
             self.screen.blit(reload_text, (20, 170))
 
         # Ability cooldown
-        ability_text = self.font_small.render(f"Ability (Q): ", True, WHITE)
+        ability_text = self.font_small.render(f"Ability (Z): ", True, WHITE)
         self.screen.blit(ability_text, (20, 200))
         if player.ability_cooldown > 0:
             cd_text = self.font_small.render(f"{player.ability_cooldown:.1f}s", True, RED)
@@ -1923,7 +1917,7 @@ class Game:
 
         # Bunker hint
         if self.world.bunker.is_player_inside(player):
-            hint = self.font_small.render("Press E to change class", True, YELLOW)
+            hint = self.font_small.render("Press X to change class", True, YELLOW)
             self.screen.blit(hint, (SCREEN_WIDTH//2 - hint.get_width()//2, SCREEN_HEIGHT - 80))
 
         # Crosshair
@@ -1967,7 +1961,7 @@ class Game:
         self.screen.blit(score_text, (SCREEN_WIDTH//2 - score_text.get_width()//2, SCREEN_HEIGHT//2))
         self.screen.blit(kills_text, (SCREEN_WIDTH//2 - kills_text.get_width()//2, SCREEN_HEIGHT//2 + 50))
 
-        retry = self.font_small.render("Press SPACE to retry", True, WHITE)
+        retry = self.font_small.render("Press R to retry", True, WHITE)
         menu = self.font_small.render("Press ESC for menu", True, WHITE)
         self.screen.blit(retry, (SCREEN_WIDTH//2 - retry.get_width()//2, SCREEN_HEIGHT//2 + 150))
         self.screen.blit(menu, (SCREEN_WIDTH//2 - menu.get_width()//2, SCREEN_HEIGHT//2 + 190))
