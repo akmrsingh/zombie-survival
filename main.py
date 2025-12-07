@@ -683,6 +683,35 @@ class Zombie:
             self.skin_color = vary_color(random.choice(base_colors), 12)
             self.detail_color = vary_color((60, 45, 70), 10)
             self.wound_color = (130, 90, 140)  # Purple ooze
+        elif zombie_type == "radioactive":
+            # Radioactive zombie - glows green, damages nearby players
+            self.health = 60 + wave * 12
+            self.speed = 70 + wave * 2
+            self.damage = 18 + wave
+            self.size = 24
+            self.radiation_radius = 80  # Damages players in this radius
+            self.radiation_damage = 5  # Damage per second to nearby players
+            # Glowing green radioactive look
+            base_colors = [(50, 255, 50), (40, 230, 40), (60, 240, 60)]
+            self.skin_color = vary_color(random.choice(base_colors), 20)
+            self.detail_color = vary_color((30, 180, 30), 15)
+            self.wound_color = (100, 255, 100)  # Glowing green wounds
+            self.glow_pulse = 0  # For pulsing glow effect
+        elif zombie_type == "cage_walker":
+            # Cage Walker - boss zombie, very powerful, commands other zombies
+            self.health = 500 + wave * 50
+            self.speed = 50 + wave
+            self.damage = 50 + wave * 3  # Massive damage
+            self.size = 45
+            self.is_boss = True
+            self.command_radius = 300  # Radius to command other zombies
+            self.roar_cooldown = 0  # Cooldown for commanding zombies
+            # Dark armored look with cage-like patterns
+            base_colors = [(40, 40, 50), (35, 35, 45), (45, 45, 55)]
+            self.skin_color = vary_color(random.choice(base_colors), 10)
+            self.detail_color = vary_color((60, 60, 80), 10)
+            self.wound_color = (80, 20, 20)  # Dark blood
+            self.cage_color = (100, 100, 120)  # Metal cage color
         else:
             # Default fallback
             self.health = 50 + wave * 10
@@ -701,7 +730,7 @@ class Zombie:
         self.knockback_vx = 0
         self.knockback_vy = 0
 
-    def update(self, dt, players, walls):
+    def update(self, dt, players, walls, bunker=None, all_zombies=None):
         # Apply knockback
         if abs(self.knockback_vx) > 1 or abs(self.knockback_vy) > 1:
             self.x += self.knockback_vx * dt
@@ -709,18 +738,49 @@ class Zombie:
             self.knockback_vx *= 0.9
             self.knockback_vy *= 0.9
 
-        # Find nearest target (player or wall)
+        # Radioactive zombie - update glow and damage nearby players
+        if self.zombie_type == "radioactive":
+            self.glow_pulse = (self.glow_pulse + dt * 3) % (math.pi * 2)
+            # Damage nearby players with radiation
+            for player in players:
+                if player.health > 0:
+                    dist = math.sqrt((player.x - self.x)**2 + (player.y - self.y)**2)
+                    if dist < self.radiation_radius:
+                        player.take_damage(self.radiation_damage * dt)
+
+        # Cage Walker - command nearby zombies to attack bunker
+        if self.zombie_type == "cage_walker" and all_zombies and bunker:
+            self.roar_cooldown -= dt
+            if self.roar_cooldown <= 0:
+                # Command nearby zombies to target bunker
+                for zombie in all_zombies:
+                    if zombie != self and zombie.active:
+                        dist = math.sqrt((zombie.x - self.x)**2 + (zombie.y - self.y)**2)
+                        if dist < self.command_radius:
+                            zombie.target_bunker = True
+                self.roar_cooldown = 5.0  # Roar every 5 seconds
+
+        # Find nearest target (player, wall, or bunker)
         nearest_dist = float('inf')
         nearest_target = None
         target_type = None
 
-        for player in players:
-            if player.health > 0:
-                dist = math.sqrt((player.x - self.x)**2 + (player.y - self.y)**2)
-                if dist < nearest_dist:
-                    nearest_dist = dist
-                    nearest_target = player
-                    target_type = "player"
+        # Check if commanded to attack bunker
+        should_target_bunker = getattr(self, 'target_bunker', False) or self.zombie_type == "cage_walker"
+
+        if should_target_bunker and bunker and bunker.health > 0:
+            dist = math.sqrt((bunker.x - self.x)**2 + (bunker.y - self.y)**2)
+            nearest_dist = dist
+            nearest_target = bunker
+            target_type = "bunker"
+        else:
+            for player in players:
+                if player.health > 0:
+                    dist = math.sqrt((player.x - self.x)**2 + (player.y - self.y)**2)
+                    if dist < nearest_dist:
+                        nearest_dist = dist
+                        nearest_target = player
+                        target_type = "player"
 
         # Check walls in path
         for wall in walls:
@@ -746,6 +806,9 @@ class Zombie:
             elif target_type == "wall" and nearest_dist > 50:
                 self.x += math.cos(self.angle) * self.speed * dt
                 self.y += math.sin(self.angle) * self.speed * dt
+            elif target_type == "bunker" and nearest_dist > 80:
+                self.x += math.cos(self.angle) * self.speed * dt
+                self.y += math.sin(self.angle) * self.speed * dt
 
             # Attack
             self.attack_cooldown -= dt
@@ -753,6 +816,9 @@ class Zombie:
                 if target_type == "player" and nearest_dist < 40:
                     nearest_target.take_damage(self.damage)
                     self.attack_cooldown = 1.0
+                elif target_type == "bunker" and nearest_dist < 100:
+                    nearest_target.take_damage(self.damage)
+                    self.attack_cooldown = 1.5
                 elif target_type == "wall" and nearest_dist < 60:
                     nearest_target.take_damage(self.damage * 2)
                     self.attack_cooldown = 0.5
@@ -826,6 +892,36 @@ class Zombie:
             pygame.draw.ellipse(screen, self.skin_color,
                               (draw_x - self.size, draw_y - self.size//2, self.size * 2, self.size))
 
+        elif self.zombie_type == "radioactive":
+            # Pulsing radioactive glow
+            glow_intensity = int(50 + 30 * math.sin(self.glow_pulse))
+            glow_radius = self.size + 10 + int(5 * math.sin(self.glow_pulse))
+            # Draw glow effect
+            for r in range(3):
+                glow_color = (0, glow_intensity + r * 30, 0)
+                pygame.draw.circle(screen, glow_color, (draw_x, draw_y), glow_radius - r * 5, 2)
+            # Radiation symbol
+            pygame.draw.circle(screen, (255, 255, 0), (draw_x, draw_y - self.size//2), 5)
+
+        elif self.zombie_type == "cage_walker":
+            # Large armored boss with cage-like pattern
+            # Draw cage bars over body
+            for i in range(4):
+                bar_angle = i * math.pi / 2
+                x1 = draw_x + int(math.cos(bar_angle) * self.size * 0.3)
+                y1 = draw_y + int(math.sin(bar_angle) * self.size * 0.3)
+                x2 = draw_x + int(math.cos(bar_angle) * self.size)
+                y2 = draw_y + int(math.sin(bar_angle) * self.size)
+                pygame.draw.line(screen, self.cage_color, (x1, y1), (x2, y2), 3)
+            # Cross bars
+            pygame.draw.circle(screen, self.cage_color, (draw_x, draw_y), self.size - 10, 2)
+            # Boss indicator - skull crown
+            pygame.draw.polygon(screen, (200, 200, 50), [
+                (draw_x - 15, draw_y - self.size - 5),
+                (draw_x, draw_y - self.size - 20),
+                (draw_x + 15, draw_y - self.size - 5)
+            ])
+
         # Eyes (facing direction) - different for each type
         eye_offset = self.size * 0.4
         eye_x = draw_x + math.cos(self.angle) * eye_offset
@@ -849,6 +945,18 @@ class Zombie:
             # Milky, dead eyes
             pygame.draw.circle(screen, (180, 180, 190), (int(eye_x - 5), int(eye_y)), 5)
             pygame.draw.circle(screen, (180, 180, 190), (int(eye_x + 5), int(eye_y)), 5)
+        elif self.zombie_type == "radioactive":
+            # Glowing bright green eyes
+            pygame.draw.circle(screen, (150, 255, 150), (int(eye_x - 5), int(eye_y)), 5)
+            pygame.draw.circle(screen, (150, 255, 150), (int(eye_x + 5), int(eye_y)), 5)
+            pygame.draw.circle(screen, (50, 255, 50), (int(eye_x - 5), int(eye_y)), 3)
+            pygame.draw.circle(screen, (50, 255, 50), (int(eye_x + 5), int(eye_y)), 3)
+        elif self.zombie_type == "cage_walker":
+            # Burning orange/red eyes - boss
+            pygame.draw.circle(screen, (255, 150, 50), (int(eye_x - 8), int(eye_y)), 7)
+            pygame.draw.circle(screen, (255, 150, 50), (int(eye_x + 8), int(eye_y)), 7)
+            pygame.draw.circle(screen, (255, 50, 0), (int(eye_x - 8), int(eye_y)), 4)
+            pygame.draw.circle(screen, (255, 50, 0), (int(eye_x + 8), int(eye_y)), 4)
         else:
             # Normal red eyes
             pygame.draw.circle(screen, (200, 60, 60), (int(eye_x - 4), int(eye_y)), 4)
@@ -1239,6 +1347,11 @@ class Bunker:
     def is_player_inside(self, player):
         return self.get_rect().collidepoint(player.x, player.y)
 
+    def take_damage(self, damage):
+        self.health -= damage
+        if self.health < 0:
+            self.health = 0
+
     def draw(self, screen, camera_offset):
         rect = self.get_rect()
         draw_rect = rect.move(-camera_offset[0], -camera_offset[1])
@@ -1345,7 +1458,19 @@ class GameWorld:
             zombie_types.append("bloater")
             weights.append(1)
 
-        zombie_type = random.choices(zombie_types, weights)[0]
+        if self.current_wave >= 4:
+            zombie_types.append("radioactive")
+            weights.append(1)
+
+        # Cage Walker spawns as boss every 5 waves starting at wave 5
+        if self.current_wave >= 5 and self.current_wave % 5 == 0:
+            # Guaranteed cage walker spawn at wave milestones
+            if random.random() < 0.2:  # 20% chance per spawn during boss waves
+                zombie_type = "cage_walker"
+            else:
+                zombie_type = random.choices(zombie_types, weights)[0]
+        else:
+            zombie_type = random.choices(zombie_types, weights)[0]
 
         zombie = Zombie(x, y, zombie_type, self.current_wave)
         self.zombies.append(zombie)
@@ -1370,7 +1495,7 @@ class GameWorld:
 
         # Update zombies
         for zombie in self.zombies[:]:
-            if not zombie.update(dt, self.players, self.walls):
+            if not zombie.update(dt, self.players, self.walls, self.bunker, self.zombies):
                 self.zombies.remove(zombie)
 
         # Update bullets
@@ -2034,9 +2159,10 @@ class Game:
                 self.camera_offset[0] = max(0, min(self.world.width - SCREEN_WIDTH, self.camera_offset[0]))
                 self.camera_offset[1] = max(0, min(self.world.height - SCREEN_HEIGHT, self.camera_offset[1]))
 
-            # Check game over
+            # Check game over - all players dead OR bunker destroyed
             all_dead = all(p.health <= 0 for p in self.local_players)
-            if all_dead:
+            bunker_destroyed = self.world.bunker.health <= 0
+            if all_dead or bunker_destroyed:
                 self.state = GameState.GAME_OVER
 
             # Network update
