@@ -885,6 +885,10 @@ class Player:
             current_speed = self.speed * 1.5  # 50% speed boost
             self.speed_boost_timer -= dt
 
+        # Sprint with Shift key (40% faster)
+        if pygame.K_LSHIFT in self.keys_pressed or pygame.K_RSHIFT in self.keys_pressed:
+            current_speed *= 1.4
+
         self.x += move_x * current_speed * dt
         self.y += move_y * current_speed * dt
 
