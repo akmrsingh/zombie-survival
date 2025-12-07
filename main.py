@@ -1472,14 +1472,19 @@ class GameWorld:
             zombie_types.append("radioactive")
             weights.append(1)
 
-        # Cage Walker spawns as boss every 5 waves starting at wave 5
-        if self.current_wave >= 5 and self.current_wave % 5 == 0:
-            # Guaranteed cage walker spawn at wave milestones
-            if random.random() < 0.2:  # 20% chance per spawn during boss waves
+        # Boss wave every 10 waves (wave 10, 20, 30, etc.)
+        if self.current_wave >= 10 and self.current_wave % 10 == 0:
+            # Spawn a guaranteed Cage Walker boss at start of boss waves
+            if not hasattr(self, 'boss_spawned_this_wave'):
+                self.boss_spawned_this_wave = False
+
+            if not self.boss_spawned_this_wave:
                 zombie_type = "cage_walker"
+                self.boss_spawned_this_wave = True
             else:
                 zombie_type = random.choices(zombie_types, weights)[0]
         else:
+            self.boss_spawned_this_wave = False
             zombie_type = random.choices(zombie_types, weights)[0]
 
         zombie = Zombie(x, y, zombie_type, self.current_wave)
