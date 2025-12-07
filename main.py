@@ -615,33 +615,83 @@ class Zombie:
         self.zombie_type = zombie_type
         self.wave = wave
 
-        # Type-specific stats
+        # Random color variation for realism
+        def vary_color(base_color, variance=20):
+            return tuple(max(0, min(255, c + random.randint(-variance, variance))) for c in base_color)
+
+        # Type-specific stats with realistic zombie colors
         if zombie_type == "normal":
             self.health = 50 + wave * 10
             self.speed = 80 + wave * 2
             self.damage = 10 + wave
             self.size = 20
-            self.color = ZOMBIE_GREEN
+            # Grayish-green rotting flesh tones
+            base_colors = [(85, 107, 85), (70, 90, 70), (95, 115, 80), (80, 100, 75)]
+            self.skin_color = vary_color(random.choice(base_colors), 15)
+            self.detail_color = vary_color((60, 75, 55), 10)
+            self.wound_color = (120, 50, 50)  # Dark red wounds
         elif zombie_type == "runner":
             self.health = 30 + wave * 5
             self.speed = 150 + wave * 5
             self.damage = 8 + wave
             self.size = 16
-            self.color = (100, 150, 100)
+            # Pale, freshly turned - more skin-like
+            base_colors = [(160, 140, 130), (145, 130, 120), (155, 145, 135), (140, 125, 115)]
+            self.skin_color = vary_color(random.choice(base_colors), 15)
+            self.detail_color = vary_color((100, 85, 80), 10)
+            self.wound_color = (180, 70, 70)  # Fresher blood
         elif zombie_type == "tank":
             self.health = 200 + wave * 30
             self.speed = 40 + wave
             self.damage = 25 + wave * 2
             self.size = 35
-            self.color = (30, 80, 30)
+            # Dark, bloated, heavily decayed
+            base_colors = [(50, 65, 50), (45, 55, 45), (55, 70, 55), (40, 50, 40)]
+            self.skin_color = vary_color(random.choice(base_colors), 10)
+            self.detail_color = vary_color((30, 40, 30), 8)
+            self.wound_color = (90, 40, 40)  # Old dried blood
         elif zombie_type == "spitter":
             self.health = 40 + wave * 8
             self.speed = 60 + wave * 2
             self.damage = 15 + wave
             self.size = 22
-            self.color = (80, 120, 40)
+            # Toxic green/yellow - infected with acid
+            base_colors = [(100, 130, 50), (90, 140, 45), (110, 135, 55), (95, 125, 40)]
+            self.skin_color = vary_color(random.choice(base_colors), 15)
+            self.detail_color = vary_color((70, 100, 30), 10)
+            self.wound_color = (150, 180, 50)  # Toxic ooze
             self.spit_cooldown = 0
             self.spit_range = 300
+        elif zombie_type == "crawler":
+            # New type: crawling zombie, low and fast
+            self.health = 25 + wave * 5
+            self.speed = 100 + wave * 3
+            self.damage = 12 + wave
+            self.size = 14
+            base_colors = [(75, 85, 75), (65, 80, 70), (80, 90, 75)]
+            self.skin_color = vary_color(random.choice(base_colors), 12)
+            self.detail_color = vary_color((50, 60, 45), 8)
+            self.wound_color = (100, 45, 45)
+        elif zombie_type == "bloater":
+            # New type: explodes on death
+            self.health = 80 + wave * 15
+            self.speed = 35 + wave
+            self.damage = 20 + wave
+            self.size = 30
+            # Swollen, purple-ish diseased look
+            base_colors = [(90, 70, 100), (85, 65, 95), (95, 75, 105)]
+            self.skin_color = vary_color(random.choice(base_colors), 12)
+            self.detail_color = vary_color((60, 45, 70), 10)
+            self.wound_color = (130, 90, 140)  # Purple ooze
+        else:
+            # Default fallback
+            self.health = 50 + wave * 10
+            self.speed = 80 + wave * 2
+            self.damage = 10 + wave
+            self.size = 20
+            self.skin_color = (85, 107, 85)
+            self.detail_color = (60, 75, 55)
+            self.wound_color = (120, 50, 50)
 
         self.max_health = self.health
         self.active = True
@@ -724,23 +774,91 @@ class Zombie:
         draw_x = int(self.x - camera_offset[0])
         draw_y = int(self.y - camera_offset[1])
 
-        # Body
-        pygame.draw.circle(screen, self.color, (draw_x, draw_y), self.size)
-        pygame.draw.circle(screen, DARK_GREEN, (draw_x, draw_y), self.size, 2)
+        # Body - main shape
+        pygame.draw.circle(screen, self.skin_color, (draw_x, draw_y), self.size)
 
-        # Eyes (facing direction)
+        # Body details/shading
+        pygame.draw.circle(screen, self.detail_color, (draw_x, draw_y), self.size, 3)
+
+        # Wound marks (random based on damage taken)
+        health_ratio = self.health / self.max_health
+        if health_ratio < 0.8:
+            # Add wound details as health decreases
+            wound_size = int(self.size * 0.3 * (1 - health_ratio))
+            wound_x = draw_x + int(self.size * 0.3)
+            wound_y = draw_y - int(self.size * 0.2)
+            pygame.draw.circle(screen, self.wound_color, (wound_x, wound_y), max(2, wound_size))
+
+        if health_ratio < 0.5:
+            wound_x2 = draw_x - int(self.size * 0.4)
+            wound_y2 = draw_y + int(self.size * 0.3)
+            pygame.draw.circle(screen, self.wound_color, (wound_x2, wound_y2), max(2, wound_size))
+
+        # Type-specific visual features
+        if self.zombie_type == "tank":
+            # Muscular arms
+            arm_angle1 = self.angle + 0.5
+            arm_angle2 = self.angle - 0.5
+            arm_x1 = draw_x + int(math.cos(arm_angle1) * self.size * 0.8)
+            arm_y1 = draw_y + int(math.sin(arm_angle1) * self.size * 0.8)
+            arm_x2 = draw_x + int(math.cos(arm_angle2) * self.size * 0.8)
+            arm_y2 = draw_y + int(math.sin(arm_angle2) * self.size * 0.8)
+            pygame.draw.circle(screen, self.skin_color, (arm_x1, arm_y1), 10)
+            pygame.draw.circle(screen, self.skin_color, (arm_x2, arm_y2), 10)
+
+        elif self.zombie_type == "spitter":
+            # Glowing toxic mouth
+            mouth_x = draw_x + int(math.cos(self.angle) * self.size * 0.5)
+            mouth_y = draw_y + int(math.sin(self.angle) * self.size * 0.5)
+            pygame.draw.circle(screen, (150, 200, 50), (mouth_x, mouth_y), 6)
+            pygame.draw.circle(screen, (180, 230, 80), (mouth_x, mouth_y), 3)
+
+        elif self.zombie_type == "bloater":
+            # Bloated bumps
+            for i in range(3):
+                bump_angle = self.angle + i * 2.1
+                bump_x = draw_x + int(math.cos(bump_angle) * self.size * 0.6)
+                bump_y = draw_y + int(math.sin(bump_angle) * self.size * 0.6)
+                pygame.draw.circle(screen, self.wound_color, (bump_x, bump_y), 5)
+
+        elif self.zombie_type == "crawler":
+            # Lower profile, elongated
+            pygame.draw.ellipse(screen, self.skin_color,
+                              (draw_x - self.size, draw_y - self.size//2, self.size * 2, self.size))
+
+        # Eyes (facing direction) - different for each type
         eye_offset = self.size * 0.4
         eye_x = draw_x + math.cos(self.angle) * eye_offset
         eye_y = draw_y + math.sin(self.angle) * eye_offset
-        pygame.draw.circle(screen, RED, (int(eye_x - 4), int(eye_y)), 4)
-        pygame.draw.circle(screen, RED, (int(eye_x + 4), int(eye_y)), 4)
+
+        if self.zombie_type == "runner":
+            # Wide, frantic eyes
+            pygame.draw.circle(screen, (255, 200, 200), (int(eye_x - 5), int(eye_y)), 5)
+            pygame.draw.circle(screen, (255, 200, 200), (int(eye_x + 5), int(eye_y)), 5)
+            pygame.draw.circle(screen, RED, (int(eye_x - 5), int(eye_y)), 2)
+            pygame.draw.circle(screen, RED, (int(eye_x + 5), int(eye_y)), 2)
+        elif self.zombie_type == "tank":
+            # Small, angry eyes
+            pygame.draw.circle(screen, (200, 50, 50), (int(eye_x - 6), int(eye_y)), 4)
+            pygame.draw.circle(screen, (200, 50, 50), (int(eye_x + 6), int(eye_y)), 4)
+        elif self.zombie_type == "spitter":
+            # Glowing yellow eyes
+            pygame.draw.circle(screen, (200, 220, 50), (int(eye_x - 4), int(eye_y)), 4)
+            pygame.draw.circle(screen, (200, 220, 50), (int(eye_x + 4), int(eye_y)), 4)
+        elif self.zombie_type == "bloater":
+            # Milky, dead eyes
+            pygame.draw.circle(screen, (180, 180, 190), (int(eye_x - 5), int(eye_y)), 5)
+            pygame.draw.circle(screen, (180, 180, 190), (int(eye_x + 5), int(eye_y)), 5)
+        else:
+            # Normal red eyes
+            pygame.draw.circle(screen, (200, 60, 60), (int(eye_x - 4), int(eye_y)), 4)
+            pygame.draw.circle(screen, (200, 60, 60), (int(eye_x + 4), int(eye_y)), 4)
 
         # Health bar
         if self.health < self.max_health:
             bar_width = self.size * 2
-            health_ratio = self.health / self.max_health
-            pygame.draw.rect(screen, RED, (draw_x - bar_width//2, draw_y - self.size - 10, bar_width, 5))
-            pygame.draw.rect(screen, GREEN, (draw_x - bar_width//2, draw_y - self.size - 10, bar_width * health_ratio, 5))
+            pygame.draw.rect(screen, (80, 20, 20), (draw_x - bar_width//2, draw_y - self.size - 10, bar_width, 5))
+            pygame.draw.rect(screen, (50, 180, 50), (draw_x - bar_width//2, draw_y - self.size - 10, int(bar_width * health_ratio), 5))
 
 
 class Player:
@@ -1203,18 +1321,31 @@ class GameWorld:
             x = 0
             y = random.randint(0, self.height)
 
-        # Zombie type based on wave
+        # Zombie type based on wave - more variety as waves progress
         zombie_types = ["normal"]
+        weights = [5]
+
         if self.current_wave >= 2:
             zombie_types.append("runner")
+            weights.append(3)
+
         if self.current_wave >= 3:
+            zombie_types.append("crawler")
+            weights.append(2)
+
+        if self.current_wave >= 4:
             zombie_types.append("tank")
+            weights.append(2)
+
         if self.current_wave >= 5:
             zombie_types.append("spitter")
+            weights.append(2)
 
-        # Weight towards normal zombies
-        weights = [5] + [2] * (len(zombie_types) - 1)
-        zombie_type = random.choices(zombie_types, weights[:len(zombie_types)])[0]
+        if self.current_wave >= 6:
+            zombie_types.append("bloater")
+            weights.append(1)
+
+        zombie_type = random.choices(zombie_types, weights)[0]
 
         zombie = Zombie(x, y, zombie_type, self.current_wave)
         self.zombies.append(zombie)
