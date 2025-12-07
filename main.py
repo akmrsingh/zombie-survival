@@ -395,11 +395,14 @@ class Player:
         self.ability_cooldown = 0
         self.walls_built = []
         self.heal_zones = []
+        self.speed_boost_timer = 0  # For Ranger speed boost
 
         # Input state
         self.keys_pressed = set()
         self.mouse_pos = (0, 0)
         self.mouse_buttons = [False, False, False]
+        self.auto_aim = False  # For P2+ who can't use mouse
+        self.auto_shoot = False  # P2 auto-shoots at enemies
 
     def setup_class(self, player_class):
         self.player_class = player_class
@@ -462,13 +465,14 @@ class Player:
         move_x = 0
         move_y = 0
 
-        if pygame.K_w in self.keys_pressed or pygame.K_UP in self.keys_pressed:
+        # P1: WASD/Arrows, P2: IJKL
+        if pygame.K_w in self.keys_pressed or pygame.K_UP in self.keys_pressed or pygame.K_i in self.keys_pressed:
             move_y -= 1
-        if pygame.K_s in self.keys_pressed or pygame.K_DOWN in self.keys_pressed:
+        if pygame.K_s in self.keys_pressed or pygame.K_DOWN in self.keys_pressed or pygame.K_k in self.keys_pressed:
             move_y += 1
-        if pygame.K_a in self.keys_pressed or pygame.K_LEFT in self.keys_pressed:
+        if pygame.K_a in self.keys_pressed or pygame.K_LEFT in self.keys_pressed or pygame.K_j in self.keys_pressed:
             move_x -= 1
-        if pygame.K_d in self.keys_pressed or pygame.K_RIGHT in self.keys_pressed:
+        if pygame.K_d in self.keys_pressed or pygame.K_RIGHT in self.keys_pressed or pygame.K_l in self.keys_pressed:
             move_x += 1
 
         # Normalize diagonal movement
@@ -476,18 +480,39 @@ class Player:
             move_x *= 0.707
             move_y *= 0.707
 
-        self.x += move_x * self.speed * dt
-        self.y += move_y * self.speed * dt
+        # Apply speed boost for Ranger
+        current_speed = self.speed
+        if self.speed_boost_timer > 0:
+            current_speed = self.speed * 1.5  # 50% speed boost
+            self.speed_boost_timer -= dt
+
+        self.x += move_x * current_speed * dt
+        self.y += move_y * current_speed * dt
 
         # Keep in bounds
         self.x = max(self.size, min(game_world.width - self.size, self.x))
         self.y = max(self.size, min(game_world.height - self.size, self.y))
 
-        # Aim towards mouse
-        screen_center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-        dx = self.mouse_pos[0] - screen_center[0]
-        dy = self.mouse_pos[1] - screen_center[1]
-        self.angle = math.atan2(dy, dx)
+        # Aim towards mouse or auto-aim at nearest zombie
+        if self.auto_aim and game_world.zombies:
+            # Find nearest zombie
+            nearest_dist = float('inf')
+            nearest_zombie = None
+            for zombie in game_world.zombies:
+                dist = math.sqrt((zombie.x - self.x)**2 + (zombie.y - self.y)**2)
+                if dist < nearest_dist:
+                    nearest_dist = dist
+                    nearest_zombie = zombie
+            if nearest_zombie and nearest_dist < 500:  # Only aim if zombie is close
+                self.angle = math.atan2(nearest_zombie.y - self.y, nearest_zombie.x - self.x)
+                self.auto_shoot = True
+            else:
+                self.auto_shoot = False
+        else:
+            screen_center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+            dx = self.mouse_pos[0] - screen_center[0]
+            dy = self.mouse_pos[1] - screen_center[1]
+            self.angle = math.atan2(dy, dx)
 
         # Cooldowns
         self.fire_cooldown -= dt
@@ -503,8 +528,9 @@ class Player:
                 self.reserve_ammo -= ammo_to_add
                 self.is_reloading = False
 
-        # Shooting
-        if self.mouse_buttons[0] and self.fire_cooldown <= 0 and not self.is_reloading:
+        # Shooting (mouse or auto-shoot for P2)
+        shooting = self.mouse_buttons[0] or self.auto_shoot
+        if shooting and self.fire_cooldown <= 0 and not self.is_reloading:
             if self.current_ammo > 0:
                 self.shoot(game_world)
 
@@ -567,7 +593,8 @@ class Player:
                 self.ability_cooldown = self.ability_max_cooldown
 
         elif self.player_class == PlayerClass.RANGER:
-            # Rapid fire mode - temporary fire rate boost handled elsewhere
+            # Speed boost - 50% faster for 5 seconds
+            self.speed_boost_timer = 5.0
             self.ability_cooldown = self.ability_max_cooldown
 
         elif self.player_class == PlayerClass.HEALER:
@@ -600,6 +627,11 @@ class Player:
     def draw(self, screen, camera_offset, is_local=True):
         draw_x = int(self.x - camera_offset[0])
         draw_y = int(self.y - camera_offset[1])
+
+        # Speed boost visual effect (glowing ring)
+        if self.speed_boost_timer > 0:
+            pygame.draw.circle(screen, YELLOW, (draw_x, draw_y), self.size + 8, 3)
+            pygame.draw.circle(screen, ORANGE, (draw_x, draw_y), self.size + 5, 2)
 
         # Body
         pygame.draw.circle(screen, self.color, (draw_x, draw_y), self.size)
@@ -1100,6 +1132,9 @@ class Game:
                 i,
                 self.selected_class[i]
             )
+            # Player 2+ use auto-aim since they can't use mouse
+            if i >= 1:
+                player.auto_aim = True
             self.local_players.append(player)
             self.world.players.append(player)
 
@@ -1225,10 +1260,28 @@ class Game:
                         self.state = GameState.CLASS_SELECT
                         self.class_confirmed = [False] * 4
 
+            # Player 2 controls (IJKL + U for ability, O for reload)
+            if len(self.local_players) > 1:
+                player2 = self.local_players[1]
+                # IJKL movement
+                if event.key in [pygame.K_i, pygame.K_j, pygame.K_k, pygame.K_l]:
+                    player2.keys_pressed.add(event.key)
+                elif event.key == pygame.K_o:
+                    player2.start_reload()
+                elif event.key == pygame.K_u:
+                    player2.use_ability(self.world)
+                elif event.key == pygame.K_p:
+                    player2.switch_weapon(1)
+
         elif event.type == pygame.KEYUP:
             if len(self.local_players) > 0:
                 player = self.local_players[0]
                 player.keys_pressed.discard(event.key)
+
+            # Player 2 key up
+            if len(self.local_players) > 1:
+                player2 = self.local_players[1]
+                player2.keys_pressed.discard(event.key)
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if len(self.local_players) > 0:
