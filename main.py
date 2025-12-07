@@ -1715,8 +1715,8 @@ class Game:
             if event.key == pygame.K_ESCAPE:
                 self.state = GameState.PAUSED
 
-            # Toggle touch controls with Shift
-            if event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
+            # Toggle touch controls with TAB
+            if event.key == pygame.K_TAB:
                 self.touch_enabled = not self.touch_enabled
 
             # Player 1 controls (WASD movement, Q/E weapons, Z ability)
