@@ -2791,10 +2791,21 @@ class Game:
             # Update world
             self.world.update(dt)
 
-            # Update camera to follow first local player
+            # Update camera to follow first alive player
             if self.local_players:
-                target_x = self.local_players[0].x - SCREEN_WIDTH // 2
-                target_y = self.local_players[0].y - SCREEN_HEIGHT // 2
+                # Find first alive player to follow
+                camera_target = None
+                for player in self.local_players:
+                    if player.health > 0:
+                        camera_target = player
+                        break
+
+                # If all dead, follow first player's body
+                if camera_target is None:
+                    camera_target = self.local_players[0]
+
+                target_x = camera_target.x - SCREEN_WIDTH // 2
+                target_y = camera_target.y - SCREEN_HEIGHT // 2
                 self.camera_offset[0] += (target_x - self.camera_offset[0]) * 5 * dt
                 self.camera_offset[1] += (target_y - self.camera_offset[1]) * 5 * dt
 
