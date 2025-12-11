@@ -2981,7 +2981,21 @@ class Game:
         title = self.font_large.render("HOST GAME", True, GREEN)
         self.screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, 150))
 
-        if self.network.is_host:
+        # Check if networking is available (not in web browser)
+        if not NETWORK_AVAILABLE:
+            # Web version - networking not supported
+            error_text = self.font_medium.render("Online multiplayer not available", True, RED)
+            self.screen.blit(error_text, (SCREEN_WIDTH//2 - error_text.get_width()//2, 300))
+
+            reason_text = self.font_small.render("Web browsers cannot host game servers", True, YELLOW)
+            self.screen.blit(reason_text, (SCREEN_WIDTH//2 - reason_text.get_width()//2, 360))
+
+            tip_text = self.font_small.render("Use local co-op (2-3 players) instead!", True, WHITE)
+            self.screen.blit(tip_text, (SCREEN_WIDTH//2 - tip_text.get_width()//2, 420))
+
+            tip2_text = self.font_small.render("Or download the desktop version for online play", True, GRAY)
+            self.screen.blit(tip2_text, (SCREEN_WIDTH//2 - tip2_text.get_width()//2, 460))
+        elif self.network.is_host:
             # Room code (big and prominent)
             code_label = self.font_medium.render("ROOM CODE:", True, YELLOW)
             self.screen.blit(code_label, (SCREEN_WIDTH//2 - code_label.get_width()//2, 250))
@@ -3016,18 +3030,33 @@ class Game:
         title = self.font_large.render("JOIN GAME", True, BLUE)
         self.screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, 200))
 
-        inst = self.font_medium.render("Enter Host IP Address:", True, WHITE)
-        self.screen.blit(inst, (SCREEN_WIDTH//2 - inst.get_width()//2, 350))
+        # Check if networking is available (not in web browser)
+        if not NETWORK_AVAILABLE:
+            # Web version - networking not supported
+            error_text = self.font_medium.render("Online multiplayer not available", True, RED)
+            self.screen.blit(error_text, (SCREEN_WIDTH//2 - error_text.get_width()//2, 300))
 
-        # IP input box
-        box_rect = pygame.Rect(SCREEN_WIDTH//2 - 150, 420, 300, 50)
-        pygame.draw.rect(self.screen, WHITE, box_rect, 2)
+            reason_text = self.font_small.render("Web browsers cannot connect to game servers", True, YELLOW)
+            self.screen.blit(reason_text, (SCREEN_WIDTH//2 - reason_text.get_width()//2, 360))
 
-        ip_display = self.font_medium.render(self.ip_input + "_", True, WHITE)
-        self.screen.blit(ip_display, (box_rect.x + 10, box_rect.y + 10))
+            tip_text = self.font_small.render("Use local co-op (2-3 players) instead!", True, WHITE)
+            self.screen.blit(tip_text, (SCREEN_WIDTH//2 - tip_text.get_width()//2, 420))
 
-        enter_inst = self.font_small.render("Press ENTER to connect", True, YELLOW)
-        self.screen.blit(enter_inst, (SCREEN_WIDTH//2 - enter_inst.get_width()//2, 500))
+            tip2_text = self.font_small.render("Or download the desktop version for online play", True, GRAY)
+            self.screen.blit(tip2_text, (SCREEN_WIDTH//2 - tip2_text.get_width()//2, 460))
+        else:
+            inst = self.font_medium.render("Enter Host IP Address:", True, WHITE)
+            self.screen.blit(inst, (SCREEN_WIDTH//2 - inst.get_width()//2, 350))
+
+            # IP input box
+            box_rect = pygame.Rect(SCREEN_WIDTH//2 - 150, 420, 300, 50)
+            pygame.draw.rect(self.screen, WHITE, box_rect, 2)
+
+            ip_display = self.font_medium.render(self.ip_input + "_", True, WHITE)
+            self.screen.blit(ip_display, (box_rect.x + 10, box_rect.y + 10))
+
+            enter_inst = self.font_small.render("Press ENTER to connect", True, YELLOW)
+            self.screen.blit(enter_inst, (SCREEN_WIDTH//2 - enter_inst.get_width()//2, 500))
 
         back = self.font_small.render("Press ESC to go back", True, GRAY)
         self.screen.blit(back, (SCREEN_WIDTH//2 - back.get_width()//2, SCREEN_HEIGHT - 100))
