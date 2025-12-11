@@ -2305,6 +2305,7 @@ class NetworkManager:
             self.lock = None
         self.host_ip = ""
         self.port = 5555
+        self.room_code = ""
 
     def host_game(self, port=5555):
         if not NETWORK_AVAILABLE:
@@ -2318,9 +2319,25 @@ class NetworkManager:
             self.is_connected = True
             self.port = port
 
-            # Get host IP
-            hostname = socket.gethostname()
-            self.host_ip = socket.gethostbyname(hostname)
+            # Get host IP - try to get the actual LAN IP, not localhost
+            try:
+                # Create a dummy connection to get the actual IP
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                self.host_ip = s.getsockname()[0]
+                s.close()
+            except:
+                # Fallback to hostname method
+                hostname = socket.gethostname()
+                self.host_ip = socket.gethostbyname(hostname)
+
+            # Generate a simple room code from the IP
+            ip_parts = self.host_ip.split('.')
+            if len(ip_parts) == 4:
+                # Create code from last two octets (e.g., 192.168.1.5 -> 1005)
+                self.room_code = f"{int(ip_parts[2]):02d}{int(ip_parts[3]):02d}"
+            else:
+                self.room_code = "0000"
 
             # Start accept thread
             self.server_thread = threading.Thread(target=self._accept_connections, daemon=True)
@@ -2962,16 +2979,30 @@ class Game:
         self.screen.fill(BLACK)
 
         title = self.font_large.render("HOST GAME", True, GREEN)
-        self.screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, 200))
+        self.screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, 150))
 
         if self.network.is_host:
-            ip_text = self.font_medium.render(f"Your IP: {self.network.host_ip}", True, WHITE)
-            port_text = self.font_medium.render(f"Port: {self.network.port}", True, WHITE)
-            waiting = self.font_small.render(f"Waiting for players... ({len(self.network.clients)} connected)", True, YELLOW)
+            # Room code (big and prominent)
+            code_label = self.font_medium.render("ROOM CODE:", True, YELLOW)
+            self.screen.blit(code_label, (SCREEN_WIDTH//2 - code_label.get_width()//2, 250))
 
-            self.screen.blit(ip_text, (SCREEN_WIDTH//2 - ip_text.get_width()//2, 350))
-            self.screen.blit(port_text, (SCREEN_WIDTH//2 - port_text.get_width()//2, 410))
+            code_text = self.font_large.render(self.network.room_code, True, GREEN)
+            self.screen.blit(code_text, (SCREEN_WIDTH//2 - code_text.get_width()//2, 300))
+
+            # IP and Port (smaller, below)
+            ip_text = self.font_small.render(f"IP: {self.network.host_ip}", True, GRAY)
+            port_text = self.font_small.render(f"Port: {self.network.port}", True, GRAY)
+
+            self.screen.blit(ip_text, (SCREEN_WIDTH//2 - ip_text.get_width()//2, 400))
+            self.screen.blit(port_text, (SCREEN_WIDTH//2 - port_text.get_width()//2, 430))
+
+            # Waiting message
+            waiting = self.font_medium.render(f"Waiting for players... ({len(self.network.clients)} connected)", True, YELLOW)
             self.screen.blit(waiting, (SCREEN_WIDTH//2 - waiting.get_width()//2, 500))
+
+            # Share instructions
+            share_text = self.font_small.render("Share the ROOM CODE with friends to join!", True, WHITE)
+            self.screen.blit(share_text, (SCREEN_WIDTH//2 - share_text.get_width()//2, 550))
         else:
             inst = self.font_medium.render("Press ENTER to start hosting", True, WHITE)
             self.screen.blit(inst, (SCREEN_WIDTH//2 - inst.get_width()//2, 400))
