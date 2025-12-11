@@ -77,6 +77,12 @@ class PlayerClass(Enum):
     RANGER = 2
     HEALER = 3
     TANK = 4
+    TRAITOR = 5  # Betrays team, allied with zombies
+
+# Desert colors
+SAND = (210, 180, 140)
+DARK_SAND = (180, 150, 110)
+LIGHT_SAND = (230, 210, 170)
 
 # Weapon Types - Realistic Stats
 @dataclass
@@ -609,11 +615,12 @@ class HealZone:
 
 class Zombie:
     """Enemy zombie with different types."""
-    def __init__(self, x, y, zombie_type="normal", wave=1):
+    def __init__(self, x, y, zombie_type="normal", wave=1, king_stage=1):
         self.x = x
         self.y = y
         self.zombie_type = zombie_type
         self.wave = wave
+        self.king_stage = king_stage  # For Zombie King boss
 
         # Random color variation for realism
         def vary_color(base_color, variance=20):
@@ -712,6 +719,37 @@ class Zombie:
             self.detail_color = vary_color((60, 60, 80), 10)
             self.wound_color = (80, 20, 20)  # Dark blood
             self.cage_color = (100, 100, 120)  # Metal cage color
+        elif zombie_type == "speed":
+            # Speed zombie - very fast, medium sized
+            self.health = 35 + wave * 6
+            self.speed = 200 + wave * 5  # Very fast!
+            self.damage = 10 + wave
+            self.size = 18
+            # Lean, athletic zombie
+            base_colors = [(130, 115, 100), (120, 105, 95), (140, 125, 110)]
+            self.skin_color = vary_color(random.choice(base_colors), 15)
+            self.detail_color = vary_color((90, 75, 65), 10)
+            self.wound_color = (160, 60, 60)
+        elif zombie_type == "zombie_king":
+            # ZOMBIE KING - Ultimate boss with stages
+            # Health and damage scale with stage
+            stage_multiplier = king_stage
+            self.health = 1000 * stage_multiplier + wave * 100
+            self.speed = 60 + stage_multiplier * 5
+            self.damage = 75 * stage_multiplier  # Massive damage
+            self.size = 60 + stage_multiplier * 5  # Gets bigger each stage
+            self.is_boss = True
+            self.king_stage = king_stage
+            self.slam_cooldown = 0  # Area attack cooldown
+            self.slam_radius = 150 + stage_multiplier * 20
+            self.roar_cooldown = 0
+            self.spawn_cooldown = 0  # Can spawn minions
+            # Royal dark purple/black colors
+            base_colors = [(60, 30, 80), (50, 25, 70), (70, 35, 90)]
+            self.skin_color = vary_color(random.choice(base_colors), 10)
+            self.detail_color = vary_color((40, 20, 50), 8)
+            self.wound_color = (120, 40, 120)  # Purple blood
+            self.crown_color = (200, 170, 50)  # Golden crown
         else:
             # Default fallback
             self.health = 50 + wave * 10
@@ -760,6 +798,27 @@ class Zombie:
                             zombie.target_bunker = True
                 self.roar_cooldown = 5.0  # Roar every 5 seconds
 
+        # Zombie King - special abilities
+        if self.zombie_type == "zombie_king" and all_zombies:
+            # Ground slam attack
+            self.slam_cooldown -= dt
+            if self.slam_cooldown <= 0:
+                # Area damage to all nearby players
+                for player in players:
+                    if player.health > 0 and not getattr(player, 'is_traitor', False):
+                        dist = math.sqrt((player.x - self.x)**2 + (player.y - self.y)**2)
+                        if dist < self.slam_radius:
+                            player.take_damage(self.damage * 0.5)  # 50% of normal damage
+                self.slam_cooldown = 4.0  # Slam every 4 seconds
+
+            # Command all zombies to attack
+            self.roar_cooldown -= dt
+            if self.roar_cooldown <= 0:
+                for zombie in all_zombies:
+                    if zombie != self and zombie.active:
+                        zombie.target_bunker = True
+                self.roar_cooldown = 8.0  # Roar every 8 seconds
+
         # Find nearest target (player, wall, or bunker)
         nearest_dist = float('inf')
         nearest_target = None
@@ -775,9 +834,9 @@ class Zombie:
             nearest_target = bunker
             target_type = "bunker"
         else:
-            # Normal zombies: find nearest player first
+            # Normal zombies: find nearest player first (ignore traitors!)
             for player in players:
-                if player.health > 0:
+                if player.health > 0 and not getattr(player, 'is_traitor', False):
                     dist = math.sqrt((player.x - self.x)**2 + (player.y - self.y)**2)
                     if dist < nearest_dist:
                         nearest_dist = dist
@@ -1022,6 +1081,21 @@ class Player:
         self.auto_aim = False  # For P2+ who can't use mouse
         self.auto_shoot = False  # P2 auto-shoots at enemies
 
+        # HP Regeneration
+        self.regen_timer = 0  # Timer for HP regen
+
+        # Healer items
+        self.bandages = 0  # Heals other players, 1 use each
+        self.medkits = 0   # Heals to full, 3 uses
+
+        # Builder rotation
+        self.block_rotation = 0  # 0, 90, 180, 270 degrees
+        self.show_block_preview = False  # Show placement preview
+
+        # Traitor specific
+        self.is_traitor = False
+        self.zombie_spawn_cooldown = 0
+
     def setup_class(self, player_class):
         self.player_class = player_class
 
@@ -1053,26 +1127,41 @@ class Player:
             self.speed = 210
             # Healer: SMGs and pistol
             self.weapons = [
-                WEAPONS["smg"],        # MP5
-                WEAPONS["p90"],        # P90 with armor piercing
+                WEAPONS["smg"],        # SMG
+                WEAPONS["p90"],        # PDW
                 WEAPONS["tranq_pistol"],
             ]
             self.color = LIGHT_BLUE
             self.ability_max_cooldown = 12  # Heal zone
+            # Healer items
+            self.bandages = 5  # Heals other players 30 HP, 1 use each
+            self.medkits = 3   # Heals to full, 3 uses total
 
         elif player_class == PlayerClass.TANK:
             self.max_health = 180
             self.speed = 140
             # Tank: Heavy weapons + Desert Eagle
             self.weapons = [
-                WEAPONS["minigun"],         # M134 Minigun
-                WEAPONS["rpg"],             # RPG-7
-                WEAPONS["grenade_launcher"], # M32 MGL
-                WEAPONS["spas12"],          # SPAS-12 shotgun
+                WEAPONS["minigun"],         # Minigun
+                WEAPONS["rpg"],             # Rocket Launcher
+                WEAPONS["grenade_launcher"], # Grenade Launcher
+                WEAPONS["spas12"],          # Auto Shotgun
                 WEAPONS["deagle"],          # Desert Eagle backup
             ]
             self.color = RED
             self.ability_max_cooldown = 20  # Ground slam
+
+        elif player_class == PlayerClass.TRAITOR:
+            self.max_health = 100
+            self.speed = 200
+            # Traitor: Basic weapons, allied with zombies
+            self.weapons = [
+                WEAPONS["pistol"],     # Basic pistol
+                WEAPONS["smg"],        # SMG
+            ]
+            self.color = PURPLE
+            self.ability_max_cooldown = 8  # Spawn zombie cooldown
+            self.is_traitor = True
 
         self.health = self.max_health
         self.current_weapon_index = 0
@@ -1099,6 +1188,13 @@ class Player:
         self.reload_timer = 0
 
     def update(self, dt, game_world):
+        # HP Regeneration - 1 HP every 3 seconds (not for traitors)
+        if not self.is_traitor and self.health > 0 and self.health < self.max_health:
+            self.regen_timer += dt
+            if self.regen_timer >= 3.0:
+                self.regen_timer = 0
+                self.heal(1)
+
         # Movement
         move_x = 0
         move_y = 0
@@ -1284,11 +1380,15 @@ class Player:
             return
 
         if self.player_class == PlayerClass.BUILDER:
-            # Build wall
+            # Build wall with rotation
             if len([w for w in game_world.walls if w.active]) < self.max_walls:
-                wall_x = self.x + math.cos(self.angle) * 60
-                wall_y = self.y + math.sin(self.angle) * 60
-                wall = Wall(wall_x, wall_y)
+                wall_x = self.x + math.cos(self.angle) * 80
+                wall_y = self.y + math.sin(self.angle) * 80
+                # Apply rotation to wall dimensions
+                if self.block_rotation == 0 or self.block_rotation == 180:
+                    wall = Wall(wall_x, wall_y, width=320, height=80)
+                else:  # 90 or 270 degrees - swap width/height
+                    wall = Wall(wall_x, wall_y, width=80, height=320)
                 game_world.walls.append(wall)
                 self.walls_built.append(wall)
                 self.ability_cooldown = self.ability_max_cooldown
@@ -1325,6 +1425,29 @@ class Player:
                 ))
             self.ability_cooldown = self.ability_max_cooldown
 
+        elif self.player_class == PlayerClass.TRAITOR:
+            # Spawn a speed zombie to fight for you
+            spawn_x = self.x + math.cos(self.angle) * 50
+            spawn_y = self.y + math.sin(self.angle) * 50
+            zombie = Zombie(spawn_x, spawn_y, "speed", game_world.current_wave)
+            game_world.zombies.append(zombie)
+            self.ability_cooldown = self.ability_max_cooldown
+            # Purple particle effect
+            for _ in range(15):
+                angle = random.uniform(0, math.pi * 2)
+                speed = random.uniform(100, 200)
+                game_world.particles.append(Particle(
+                    spawn_x, spawn_y, PURPLE,
+                    (math.cos(angle) * speed, math.sin(angle) * speed),
+                    random.uniform(0.2, 0.4), 5
+                ))
+
+    def rotate_block(self):
+        """Rotate block placement direction for Builder."""
+        if self.player_class == PlayerClass.BUILDER:
+            self.block_rotation = (self.block_rotation + 90) % 360
+            self.show_block_preview = True
+
     def draw(self, screen, camera_offset, is_local=True):
         draw_x = int(self.x - camera_offset[0])
         draw_y = int(self.y - camera_offset[1])
@@ -1359,6 +1482,26 @@ class Player:
                 (draw_x - 8, draw_y + 8), (draw_x - 5, draw_y),
                 (draw_x - 10, draw_y - 5), (draw_x - 5, draw_y - 3)
             ])
+        elif self.player_class == PlayerClass.TRAITOR:
+            # Skull icon (traitor)
+            pygame.draw.circle(screen, WHITE, (draw_x, draw_y - 2), 6)  # Skull
+            pygame.draw.circle(screen, DARK_GRAY, (draw_x - 2, draw_y - 3), 2)  # Left eye
+            pygame.draw.circle(screen, DARK_GRAY, (draw_x + 2, draw_y - 3), 2)  # Right eye
+            pygame.draw.line(screen, DARK_GRAY, (draw_x - 2, draw_y + 2), (draw_x + 2, draw_y + 2), 1)  # Teeth
+
+        # Builder block preview
+        if self.player_class == PlayerClass.BUILDER and self.show_block_preview:
+            preview_x = int(self.x + math.cos(self.angle) * 80 - camera_offset[0])
+            preview_y = int(self.y + math.sin(self.angle) * 80 - camera_offset[1])
+            if self.block_rotation == 0 or self.block_rotation == 180:
+                preview_w, preview_h = 320, 80
+            else:
+                preview_w, preview_h = 80, 320
+            # Blue highlight preview
+            preview_surface = pygame.Surface((preview_w, preview_h), pygame.SRCALPHA)
+            preview_surface.fill((0, 100, 255, 100))  # Semi-transparent blue
+            screen.blit(preview_surface, (preview_x - preview_w//2, preview_y - preview_h//2))
+            pygame.draw.rect(screen, BLUE, (preview_x - preview_w//2, preview_y - preview_h//2, preview_w, preview_h), 2)
 
         # Draw shell casings
         for shell in self.shell_casings:
@@ -1496,7 +1639,7 @@ class Bunker:
 
 class GameWorld:
     """Main game world containing all entities."""
-    def __init__(self, width=3000, height=3000):
+    def __init__(self, width=5000, height=5000):
         self.width = width
         self.height = height
         self.players = []
@@ -1514,9 +1657,57 @@ class GameWorld:
         self.wave_active = False
         self.wave_cooldown = 5  # Time between waves
 
+        # Zombie King boss system
+        self.zombie_king = None
+        self.zombie_king_stage = 1  # Starts at stage 1
+        self.zombie_king_defeated_count = 0
+
         # Scores
         self.kills = 0
         self.score = 0
+
+        # Desert environment - generate rocks and shrubs
+        self.rocks = []
+        self.shrubs = []
+        self.generate_desert_environment()
+
+    def generate_desert_environment(self):
+        """Generate rocks and dead shrubs for desert background."""
+        # Generate rocks (avoid center bunker area)
+        bunker_safe_zone = 400  # Don't spawn rocks near bunker
+        for _ in range(80):  # 80 rocks scattered around
+            while True:
+                x = random.randint(50, self.width - 50)
+                y = random.randint(50, self.height - 50)
+                # Check not too close to bunker
+                dist_to_bunker = math.sqrt((x - self.width//2)**2 + (y - self.height//2)**2)
+                if dist_to_bunker > bunker_safe_zone:
+                    break
+            size = random.randint(20, 60)
+            color_var = random.randint(-20, 20)
+            rock_color = (120 + color_var, 110 + color_var, 100 + color_var)
+            self.rocks.append({
+                'x': x, 'y': y, 'size': size, 'color': rock_color,
+                'shape': random.choice(['circle', 'polygon'])
+            })
+
+        # Generate dead shrubs
+        for _ in range(60):  # 60 shrubs
+            while True:
+                x = random.randint(50, self.width - 50)
+                y = random.randint(50, self.height - 50)
+                dist_to_bunker = math.sqrt((x - self.width//2)**2 + (y - self.height//2)**2)
+                if dist_to_bunker > bunker_safe_zone:
+                    break
+            size = random.randint(15, 40)
+            # Dead shrub colors - browns and dark greens
+            shrub_color = random.choice([
+                (100, 80, 50), (90, 70, 40), (80, 90, 50), (70, 60, 30)
+            ])
+            self.shrubs.append({
+                'x': x, 'y': y, 'size': size, 'color': shrub_color,
+                'branches': random.randint(3, 6)
+            })
 
     def start_wave(self, wave_num):
         self.current_wave = wave_num
@@ -1551,6 +1742,8 @@ class GameWorld:
         if self.current_wave >= 3:
             zombie_types.append("crawler")
             weights.append(2)
+            zombie_types.append("speed")  # Speed zombie
+            weights.append(2)
 
         if self.current_wave >= 4:
             zombie_types.append("tank")
@@ -1568,9 +1761,24 @@ class GameWorld:
             zombie_types.append("radioactive")
             weights.append(1)
 
-        # Boss wave every 10 waves (wave 10, 20, 30, etc.)
-        if self.current_wave >= 10 and self.current_wave % 10 == 0:
-            # Spawn a guaranteed Cage Walker boss at start of boss waves
+        # Zombie King spawns every 7 waves (wave 7, 14, 21, etc.)
+        if self.current_wave >= 7 and self.current_wave % 7 == 0:
+            if not hasattr(self, 'king_spawned_this_wave'):
+                self.king_spawned_this_wave = False
+
+            if not self.king_spawned_this_wave and self.zombie_king is None:
+                # Spawn Zombie King at current stage
+                zombie_type = "zombie_king"
+                self.king_spawned_this_wave = True
+                zombie = Zombie(x, y, zombie_type, self.current_wave, king_stage=self.zombie_king_stage)
+                self.zombie_king = zombie
+                self.zombies.append(zombie)
+                return
+        else:
+            self.king_spawned_this_wave = False
+
+        # Cage Walker boss every 5 waves (wave 5, 10, 15, etc.)
+        if self.current_wave >= 5 and self.current_wave % 5 == 0:
             if not hasattr(self, 'boss_spawned_this_wave'):
                 self.boss_spawned_this_wave = False
 
@@ -1607,6 +1815,18 @@ class GameWorld:
         # Update zombies
         for zombie in self.zombies[:]:
             if not zombie.update(dt, self.players, self.walls, self.bunker, self.zombies):
+                # Check if this was the Zombie King
+                if zombie.zombie_type == "zombie_king":
+                    self.zombie_king = None
+                    self.zombie_king_defeated_count += 1
+
+                    # If defeated at wave 70+, permanently dead
+                    if self.current_wave >= 70:
+                        pass  # King is dead forever
+                    else:
+                        # Increase stage for next spawn
+                        self.zombie_king_stage += 1
+
                 self.zombies.remove(zombie)
 
         # Update bullets
@@ -1717,19 +1937,58 @@ class GameWorld:
             player.update(dt, self)
 
     def draw(self, screen, camera_offset):
-        # Background
-        screen.fill((30, 40, 30))
+        # Desert background
+        screen.fill(SAND)
 
-        # Grid
-        grid_size = 100
+        # Draw subtle grid lines (sand dune patterns)
+        grid_size = 150
         start_x = int(camera_offset[0] // grid_size) * grid_size
         start_y = int(camera_offset[1] // grid_size) * grid_size
         for x in range(start_x, int(camera_offset[0] + SCREEN_WIDTH + grid_size), grid_size):
-            pygame.draw.line(screen, (40, 50, 40),
-                           (x - camera_offset[0], 0), (x - camera_offset[0], SCREEN_HEIGHT))
+            pygame.draw.line(screen, DARK_SAND,
+                           (x - camera_offset[0], 0), (x - camera_offset[0], SCREEN_HEIGHT), 1)
         for y in range(start_y, int(camera_offset[1] + SCREEN_HEIGHT + grid_size), grid_size):
-            pygame.draw.line(screen, (40, 50, 40),
-                           (0, y - camera_offset[1]), (SCREEN_WIDTH, y - camera_offset[1]))
+            pygame.draw.line(screen, DARK_SAND,
+                           (0, y - camera_offset[1]), (SCREEN_WIDTH, y - camera_offset[1]), 1)
+
+        # Draw rocks
+        for rock in self.rocks:
+            rx = int(rock['x'] - camera_offset[0])
+            ry = int(rock['y'] - camera_offset[1])
+            # Only draw if on screen
+            if -100 < rx < SCREEN_WIDTH + 100 and -100 < ry < SCREEN_HEIGHT + 100:
+                if rock['shape'] == 'circle':
+                    pygame.draw.circle(screen, rock['color'], (rx, ry), rock['size'])
+                    pygame.draw.circle(screen, (rock['color'][0]-20, rock['color'][1]-20, rock['color'][2]-20), (rx, ry), rock['size'], 2)
+                else:
+                    # Polygon rock
+                    points = []
+                    for i in range(5):
+                        angle = i * (math.pi * 2 / 5) + random.random() * 0.3
+                        dist = rock['size'] * (0.7 + random.random() * 0.3)
+                        points.append((rx + math.cos(angle) * dist, ry + math.sin(angle) * dist))
+                    pygame.draw.polygon(screen, rock['color'], points)
+
+        # Draw dead shrubs
+        for shrub in self.shrubs:
+            sx = int(shrub['x'] - camera_offset[0])
+            sy = int(shrub['y'] - camera_offset[1])
+            if -50 < sx < SCREEN_WIDTH + 50 and -50 < sy < SCREEN_HEIGHT + 50:
+                # Draw branches
+                for i in range(shrub['branches']):
+                    angle = (i / shrub['branches']) * math.pi * 2 + random.random() * 0.5
+                    length = shrub['size'] * (0.6 + random.random() * 0.4)
+                    end_x = sx + math.cos(angle) * length
+                    end_y = sy + math.sin(angle) * length
+                    pygame.draw.line(screen, shrub['color'], (sx, sy), (int(end_x), int(end_y)), 2)
+                    # Sub-branches
+                    if random.random() > 0.5:
+                        sub_angle = angle + random.uniform(-0.5, 0.5)
+                        sub_length = length * 0.5
+                        pygame.draw.line(screen, shrub['color'],
+                                       (int(end_x), int(end_y)),
+                                       (int(end_x + math.cos(sub_angle) * sub_length),
+                                        int(end_y + math.sin(sub_angle) * sub_length)), 1)
 
         # World boundary
         pygame.draw.rect(screen, RED, (-camera_offset[0], -camera_offset[1], self.width, self.height), 5)
@@ -2100,7 +2359,14 @@ class Game:
                 elif event.key == pygame.K_e:
                     player.switch_weapon(1)   # Next weapon
                 elif event.key == pygame.K_z:
+                    # Z key: Ability OR rotate block preview for Builder
+                    if player.player_class == PlayerClass.BUILDER:
+                        player.rotate_block()  # Rotate and show preview
                     player.use_ability(self.world)
+                elif event.key == pygame.K_c:
+                    # C key: Just rotate block (for Builder)
+                    if player.player_class == PlayerClass.BUILDER:
+                        player.rotate_block()
                 elif event.key == pygame.K_b:
                     # Class switch in bunker
                     if self.world.bunker.is_player_inside(player):
