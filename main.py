@@ -1511,18 +1511,161 @@ class Player:
             shell_color = (180, 140, 60)  # Brass color
             pygame.draw.circle(screen, shell_color, (shell_x, shell_y), shell['size'] // 2)
 
-        # Gun with kick effect
-        gun_length = 30 - self.gun_kick  # Gun moves back when kicked
-        gun_start_x = draw_x + math.cos(self.angle) * (self.size - self.gun_kick * 0.5)
-        gun_start_y = draw_y + math.sin(self.angle) * (self.size - self.gun_kick * 0.5)
-        gun_end_x = gun_start_x + math.cos(self.angle) * gun_length
-        gun_end_y = gun_start_y + math.sin(self.angle) * gun_length
+        # Draw realistic gun based on weapon type
+        weapon = self.current_weapon
+        kick = self.gun_kick
 
-        # Gun barrel (darker inner, lighter outer)
-        pygame.draw.line(screen, (40, 40, 40), (int(gun_start_x), int(gun_start_y)), (int(gun_end_x), int(gun_end_y)), 8)
-        pygame.draw.line(screen, DARK_GRAY, (int(gun_start_x), int(gun_start_y)), (int(gun_end_x), int(gun_end_y)), 5)
+        # Gun position (attached to player)
+        gun_x = draw_x + math.cos(self.angle) * (self.size - kick * 0.3)
+        gun_y = draw_y + math.sin(self.angle) * (self.size - kick * 0.3)
 
-        # Muzzle flash effect
+        # Rotate gun graphics based on angle
+        cos_a = math.cos(self.angle)
+        sin_a = math.sin(self.angle)
+
+        # Perpendicular for gun height
+        perp_x = -sin_a
+        perp_y = cos_a
+
+        # Gun colors
+        gun_black = (30, 30, 30)
+        gun_dark = (50, 50, 50)
+        gun_gray = (70, 70, 70)
+        gun_brown = (90, 60, 40)  # Wood/grip
+
+        # Determine gun type and draw appropriate shape
+        weapon_name = weapon.name.lower()
+
+        if 'pistol' in weapon_name or 'deagle' in weapon_name:
+            # PISTOL - compact with grip
+            barrel_len = 18 - kick
+            # Barrel
+            barrel_end_x = gun_x + cos_a * barrel_len
+            barrel_end_y = gun_y + sin_a * barrel_len
+            pygame.draw.line(screen, gun_black, (int(gun_x), int(gun_y)), (int(barrel_end_x), int(barrel_end_y)), 6)
+            # Slide (top part)
+            pygame.draw.line(screen, gun_dark, (int(gun_x - cos_a*5), int(gun_y - sin_a*5)), (int(barrel_end_x), int(barrel_end_y)), 8)
+            # Grip (angled down)
+            grip_x = gun_x - cos_a * 3 + perp_x * 8
+            grip_y = gun_y - sin_a * 3 + perp_y * 8
+            pygame.draw.line(screen, gun_brown, (int(gun_x - cos_a*3), int(gun_y - sin_a*3)), (int(grip_x), int(grip_y)), 6)
+
+        elif 'rifle' in weapon_name or 'assault' in weapon_name or 'heavy rifle' in weapon_name:
+            # ASSAULT RIFLE - long barrel, stock, magazine
+            barrel_len = 35 - kick
+            barrel_end_x = gun_x + cos_a * barrel_len
+            barrel_end_y = gun_y + sin_a * barrel_len
+            # Main body
+            pygame.draw.line(screen, gun_black, (int(gun_x - cos_a*10), int(gun_y - sin_a*10)), (int(barrel_end_x), int(barrel_end_y)), 7)
+            # Upper rail
+            pygame.draw.line(screen, gun_gray, (int(gun_x - cos_a*5), int(gun_y - sin_a*5 - perp_y*2)), (int(gun_x + cos_a*15), int(gun_y + sin_a*15 - perp_y*2)), 3)
+            # Magazine
+            mag_x = gun_x + cos_a * 5
+            mag_y = gun_y + sin_a * 5
+            pygame.draw.line(screen, gun_dark, (int(mag_x), int(mag_y)), (int(mag_x + perp_x*12), int(mag_y + perp_y*12)), 5)
+            # Stock
+            stock_x = gun_x - cos_a * 15
+            stock_y = gun_y - sin_a * 15
+            pygame.draw.line(screen, gun_brown, (int(gun_x - cos_a*10), int(gun_y - sin_a*10)), (int(stock_x), int(stock_y)), 6)
+
+        elif 'sniper' in weapon_name or 'marksman' in weapon_name:
+            # SNIPER RIFLE - very long, scope
+            barrel_len = 45 - kick
+            barrel_end_x = gun_x + cos_a * barrel_len
+            barrel_end_y = gun_y + sin_a * barrel_len
+            # Long barrel
+            pygame.draw.line(screen, gun_black, (int(gun_x - cos_a*12), int(gun_y - sin_a*12)), (int(barrel_end_x), int(barrel_end_y)), 5)
+            # Scope
+            scope_x = gun_x + cos_a * 8
+            scope_y = gun_y + sin_a * 8 - perp_y * 5
+            pygame.draw.circle(screen, gun_gray, (int(scope_x), int(scope_y)), 4)
+            pygame.draw.circle(screen, (100, 150, 200), (int(scope_x), int(scope_y)), 2)  # Lens
+            # Stock
+            pygame.draw.line(screen, gun_brown, (int(gun_x - cos_a*12), int(gun_y - sin_a*12)), (int(gun_x - cos_a*22), int(gun_y - sin_a*22)), 7)
+
+        elif 'shotgun' in weapon_name:
+            # SHOTGUN - thick barrel, pump
+            barrel_len = 30 - kick
+            barrel_end_x = gun_x + cos_a * barrel_len
+            barrel_end_y = gun_y + sin_a * barrel_len
+            # Thick barrel
+            pygame.draw.line(screen, gun_black, (int(gun_x), int(gun_y)), (int(barrel_end_x), int(barrel_end_y)), 9)
+            # Pump grip
+            pump_x = gun_x + cos_a * 12
+            pump_y = gun_y + sin_a * 12
+            pygame.draw.line(screen, gun_brown, (int(pump_x - perp_x*4), int(pump_y - perp_y*4)), (int(pump_x + perp_x*6), int(pump_y + perp_y*6)), 6)
+            # Stock
+            pygame.draw.line(screen, gun_brown, (int(gun_x - cos_a*5), int(gun_y - sin_a*5)), (int(gun_x - cos_a*18), int(gun_y - sin_a*18)), 7)
+
+        elif 'smg' in weapon_name or 'pdw' in weapon_name:
+            # SMG - compact, magazine in front
+            barrel_len = 22 - kick
+            barrel_end_x = gun_x + cos_a * barrel_len
+            barrel_end_y = gun_y + sin_a * barrel_len
+            # Body
+            pygame.draw.line(screen, gun_black, (int(gun_x - cos_a*8), int(gun_y - sin_a*8)), (int(barrel_end_x), int(barrel_end_y)), 6)
+            # Magazine (in grip)
+            mag_x = gun_x
+            mag_y = gun_y
+            pygame.draw.line(screen, gun_dark, (int(mag_x), int(mag_y)), (int(mag_x + perp_x*10), int(mag_y + perp_y*10)), 5)
+            # Folding stock
+            pygame.draw.line(screen, gun_gray, (int(gun_x - cos_a*8), int(gun_y - sin_a*8)), (int(gun_x - cos_a*14), int(gun_y - sin_a*14)), 4)
+
+        elif 'minigun' in weapon_name or 'cyclone' in weapon_name:
+            # MINIGUN - multiple barrels, huge
+            barrel_len = 40 - kick
+            barrel_end_x = gun_x + cos_a * barrel_len
+            barrel_end_y = gun_y + sin_a * barrel_len
+            # Multiple barrels
+            for i in range(-2, 3):
+                offset = i * 3
+                pygame.draw.line(screen, gun_black,
+                    (int(gun_x + perp_x*offset), int(gun_y + perp_y*offset)),
+                    (int(barrel_end_x + perp_x*offset), int(barrel_end_y + perp_y*offset)), 3)
+            # Housing
+            pygame.draw.circle(screen, gun_dark, (int(gun_x), int(gun_y)), 10)
+            # Ammo box
+            pygame.draw.rect(screen, gun_gray, (int(gun_x - cos_a*15 - 8), int(gun_y - sin_a*15 - 8), 16, 16))
+
+        elif 'rocket' in weapon_name or 'rpg' in weapon_name:
+            # ROCKET LAUNCHER - tube
+            barrel_len = 38 - kick
+            barrel_end_x = gun_x + cos_a * barrel_len
+            barrel_end_y = gun_y + sin_a * barrel_len
+            # Tube
+            pygame.draw.line(screen, (60, 80, 60), (int(gun_x - cos_a*10), int(gun_y - sin_a*10)), (int(barrel_end_x), int(barrel_end_y)), 12)
+            pygame.draw.line(screen, (80, 100, 80), (int(gun_x - cos_a*10), int(gun_y - sin_a*10)), (int(barrel_end_x), int(barrel_end_y)), 8)
+            # Sight
+            pygame.draw.line(screen, gun_black, (int(gun_x + cos_a*5 - perp_x*8), int(gun_y + sin_a*5 - perp_y*8)), (int(gun_x + cos_a*5 - perp_x*14), int(gun_y + sin_a*5 - perp_y*14)), 3)
+            # Grip
+            pygame.draw.line(screen, gun_brown, (int(gun_x), int(gun_y)), (int(gun_x + perp_x*10), int(gun_y + perp_y*10)), 5)
+
+        elif 'grenade' in weapon_name or 'launcher' in weapon_name:
+            # GRENADE LAUNCHER - drum magazine
+            barrel_len = 28 - kick
+            barrel_end_x = gun_x + cos_a * barrel_len
+            barrel_end_y = gun_y + sin_a * barrel_len
+            # Barrel
+            pygame.draw.line(screen, gun_black, (int(gun_x), int(gun_y)), (int(barrel_end_x), int(barrel_end_y)), 10)
+            # Drum magazine
+            drum_x = gun_x + cos_a * 8 + perp_x * 8
+            drum_y = gun_y + sin_a * 8 + perp_y * 8
+            pygame.draw.circle(screen, gun_dark, (int(drum_x), int(drum_y)), 8)
+            pygame.draw.circle(screen, gun_gray, (int(drum_x), int(drum_y)), 5)
+            # Stock
+            pygame.draw.line(screen, gun_brown, (int(gun_x - cos_a*5), int(gun_y - sin_a*5)), (int(gun_x - cos_a*15), int(gun_y - sin_a*15)), 6)
+
+        else:
+            # DEFAULT - simple gun shape
+            barrel_len = 25 - kick
+            barrel_end_x = gun_x + cos_a * barrel_len
+            barrel_end_y = gun_y + sin_a * barrel_len
+            pygame.draw.line(screen, gun_black, (int(gun_x), int(gun_y)), (int(barrel_end_x), int(barrel_end_y)), 6)
+            pygame.draw.line(screen, gun_brown, (int(gun_x), int(gun_y)), (int(gun_x + perp_x*8), int(gun_y + perp_y*8)), 5)
+
+        # Muzzle flash effect (keep existing)
+        gun_end_x = gun_x + cos_a * (30 - kick)
+        gun_end_y = gun_y + sin_a * (30 - kick)
         if self.muzzle_flash_timer > 0:
             flash_size = int(15 + self.current_weapon.damage / 10)
             flash_x = int(gun_end_x + math.cos(self.angle) * 5)
