@@ -1482,6 +1482,8 @@ class Player:
                 game_world.walls.append(wall)
                 self.walls_built.append(wall)
                 self.ability_cooldown = self.ability_max_cooldown
+                # Hide blueprint preview after placing
+                self.show_block_preview = False
 
         elif self.player_class == PlayerClass.RANGER:
             # Speed boost - 50% faster for 5 seconds
