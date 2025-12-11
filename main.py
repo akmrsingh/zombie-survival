@@ -364,6 +364,21 @@ WEAPONS = {
         caliber=".50 AE",
         range=400
     ),
+
+    # Combat Knife - melee, instant kill on regular zombies
+    "knife": WeaponStats(
+        name="Combat Knife",
+        damage=9999,  # Instant kill (except bosses)
+        fire_rate=2.0,  # Slash rate
+        reload_time=0,  # No reload
+        mag_size=999,  # Unlimited
+        max_ammo=999,
+        bullet_speed=0,  # Melee - no bullet
+        spread=0,
+        recoil=0,
+        caliber="Melee",
+        range=50  # Very short range
+    ),
 }
 
 
@@ -1102,8 +1117,8 @@ class Player:
         if player_class == PlayerClass.BUILDER:
             self.max_health = 120
             self.speed = 200
-            # Builder: Nail gun + sidearm
-            self.weapons = [WEAPONS["nail_gun"], WEAPONS["glock"]]
+            # Builder: Nail gun + sidearm + knife
+            self.weapons = [WEAPONS["nail_gun"], WEAPONS["glock"], WEAPONS["knife"]]
             self.color = ORANGE
             self.ability_max_cooldown = 3  # Wall building cooldown
             self.max_walls = 10
@@ -1111,13 +1126,14 @@ class Player:
         elif player_class == PlayerClass.RANGER:
             self.max_health = 100
             self.speed = 220
-            # Ranger: Full weapon arsenal
+            # Ranger: Full weapon arsenal + knife
             self.weapons = [
-                WEAPONS["rifle"],      # M4A1 - Primary
-                WEAPONS["ak47"],       # AK-47 - Alt rifle
-                WEAPONS["shotgun"],    # Remington 870
-                WEAPONS["sniper"],     # Barrett M82
-                WEAPONS["pistol"],     # M1911 backup
+                WEAPONS["rifle"],      # Assault Rifle - Primary
+                WEAPONS["ak47"],       # Heavy Rifle
+                WEAPONS["shotgun"],    # Shotgun
+                WEAPONS["sniper"],     # Sniper Rifle
+                WEAPONS["pistol"],     # Pistol backup
+                WEAPONS["knife"],      # Combat Knife
             ]
             self.color = GREEN
             self.ability_max_cooldown = 15  # Speed boost
@@ -1125,11 +1141,12 @@ class Player:
         elif player_class == PlayerClass.HEALER:
             self.max_health = 90
             self.speed = 210
-            # Healer: SMGs and pistol
+            # Healer: SMGs and pistol + knife
             self.weapons = [
                 WEAPONS["smg"],        # SMG
                 WEAPONS["p90"],        # PDW
                 WEAPONS["tranq_pistol"],
+                WEAPONS["knife"],      # Combat Knife
             ]
             self.color = LIGHT_BLUE
             self.ability_max_cooldown = 12  # Heal zone
@@ -1140,13 +1157,14 @@ class Player:
         elif player_class == PlayerClass.TANK:
             self.max_health = 180
             self.speed = 140
-            # Tank: Heavy weapons + Desert Eagle
+            # Tank: Heavy weapons + Desert Eagle + Knife
             self.weapons = [
                 WEAPONS["minigun"],         # Minigun
                 WEAPONS["rpg"],             # Rocket Launcher
                 WEAPONS["grenade_launcher"], # Grenade Launcher
                 WEAPONS["spas12"],          # Auto Shotgun
                 WEAPONS["deagle"],          # Desert Eagle backup
+                WEAPONS["knife"],           # Combat Knife
             ]
             self.color = RED
             self.ability_max_cooldown = 20  # Ground slam
@@ -1154,10 +1172,11 @@ class Player:
         elif player_class == PlayerClass.TRAITOR:
             self.max_health = 100
             self.speed = 200
-            # Traitor: Basic weapons, allied with zombies
+            # Traitor: Basic weapons, allied with zombies + Knife
             self.weapons = [
                 WEAPONS["pistol"],     # Basic pistol
                 WEAPONS["smg"],        # SMG
+                WEAPONS["knife"],      # Combat Knife
             ]
             self.color = PURPLE
             self.ability_max_cooldown = 8  # Spawn zombie cooldown
@@ -1305,8 +1324,44 @@ class Player:
 
     def shoot(self, game_world):
         weapon = self.current_weapon
-        self.current_ammo -= 1
         self.fire_cooldown = 1.0 / weapon.fire_rate
+
+        # Check if this is a melee weapon (knife)
+        if 'knife' in weapon.name.lower() or weapon.bullet_speed == 0:
+            # MELEE ATTACK - knife slash
+            self.gun_kick = 8  # Slash animation
+
+            # Find zombies in melee range
+            melee_range = 60
+            slash_x = self.x + math.cos(self.angle) * melee_range
+            slash_y = self.y + math.sin(self.angle) * melee_range
+
+            for zombie in game_world.zombies[:]:
+                dist = math.sqrt((zombie.x - slash_x)**2 + (zombie.y - slash_y)**2)
+                if dist < 50:  # Hit range
+                    # Check if boss (don't instant kill bosses)
+                    if zombie.zombie_type in ["cage_walker", "zombie_king"]:
+                        # Do reduced damage to bosses
+                        zombie.take_damage(50, self.angle)
+                    else:
+                        # Instant kill regular zombies!
+                        zombie.take_damage(9999, self.angle)
+                        game_world.kills += 1
+                        game_world.score += 100
+
+            # Slash particles (white/silver)
+            for _ in range(8):
+                angle = self.angle + random.uniform(-0.8, 0.8)
+                speed = random.uniform(150, 300)
+                game_world.particles.append(Particle(
+                    slash_x, slash_y, (200, 200, 220),
+                    (math.cos(angle) * speed, math.sin(angle) * speed),
+                    random.uniform(0.1, 0.2), 3
+                ))
+            return  # Don't shoot bullets for melee
+
+        # Regular gun shooting
+        self.current_ammo -= 1
 
         # Apply recoil to spread - accuracy degrades with rapid fire
         effective_spread = weapon.spread + self.recoil_offset
@@ -1654,6 +1709,31 @@ class Player:
             pygame.draw.circle(screen, gun_gray, (int(drum_x), int(drum_y)), 5)
             # Stock
             pygame.draw.line(screen, gun_brown, (int(gun_x - cos_a*5), int(gun_y - sin_a*5)), (int(gun_x - cos_a*15), int(gun_y - sin_a*15)), 6)
+
+        elif 'knife' in weapon_name:
+            # COMBAT KNIFE - blade with handle
+            blade_len = 25 - kick
+            blade_end_x = gun_x + cos_a * blade_len
+            blade_end_y = gun_y + sin_a * blade_len
+            # Blade (silver/metallic)
+            blade_color = (180, 180, 190)
+            blade_edge = (140, 140, 150)
+            # Main blade
+            pygame.draw.line(screen, blade_color, (int(gun_x), int(gun_y)), (int(blade_end_x), int(blade_end_y)), 5)
+            # Sharp edge highlight
+            pygame.draw.line(screen, blade_edge,
+                (int(gun_x + perp_x*2), int(gun_y + perp_y*2)),
+                (int(blade_end_x), int(blade_end_y)), 2)
+            # Handle/grip (brown)
+            handle_x = gun_x - cos_a * 12
+            handle_y = gun_y - sin_a * 12
+            pygame.draw.line(screen, gun_brown, (int(gun_x - cos_a*2), int(gun_y - sin_a*2)), (int(handle_x), int(handle_y)), 7)
+            # Guard (cross piece between blade and handle)
+            guard_x = gun_x - cos_a * 2
+            guard_y = gun_y - sin_a * 2
+            pygame.draw.line(screen, gun_dark,
+                (int(guard_x - perp_x*5), int(guard_y - perp_y*5)),
+                (int(guard_x + perp_x*5), int(guard_y + perp_y*5)), 3)
 
         else:
             # DEFAULT - simple gun shape
