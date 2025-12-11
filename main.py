@@ -1207,6 +1207,10 @@ class Player:
         self.reload_timer = 0
 
     def update(self, dt, game_world):
+        # Dead players can't move or do anything
+        if self.health <= 0:
+            return
+
         # HP Regeneration - 1 HP every 3 seconds (not for traitors)
         if not self.is_traitor and self.health > 0 and self.health < self.max_health:
             self.regen_timer += dt
@@ -1346,6 +1350,10 @@ class Player:
                 self.heal_zones.remove(zone)
 
     def shoot(self, game_world):
+        # Dead players can't shoot
+        if self.health <= 0:
+            return
+
         weapon = self.current_weapon
         self.fire_cooldown = 1.0 / weapon.fire_rate
 
@@ -1454,6 +1462,10 @@ class Player:
             self.reload_timer = self.current_weapon.reload_time
 
     def use_ability(self, game_world):
+        # Dead players can't use abilities
+        if self.health <= 0:
+            return
+
         if self.ability_cooldown > 0:
             return
 
