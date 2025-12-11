@@ -1218,15 +1218,38 @@ class Player:
         move_x = 0
         move_y = 0
 
-        # P1: WASD/Arrows, P2: IJKL, P3: TFGH
-        if pygame.K_w in self.keys_pressed or pygame.K_UP in self.keys_pressed or pygame.K_i in self.keys_pressed or pygame.K_t in self.keys_pressed:
-            move_y -= 1
-        if pygame.K_s in self.keys_pressed or pygame.K_DOWN in self.keys_pressed or pygame.K_k in self.keys_pressed or pygame.K_g in self.keys_pressed:
-            move_y += 1
-        if pygame.K_a in self.keys_pressed or pygame.K_LEFT in self.keys_pressed or pygame.K_j in self.keys_pressed or pygame.K_f in self.keys_pressed:
-            move_x -= 1
-        if pygame.K_d in self.keys_pressed or pygame.K_RIGHT in self.keys_pressed or pygame.K_l in self.keys_pressed or pygame.K_h in self.keys_pressed:
-            move_x += 1
+        # Each player has their own keys based on player_id
+        # P1 (id=0): WASD/Arrows, P2 (id=1): IJKL, P3 (id=2): TFGH
+        if self.player_id == 0:
+            # Player 1: WASD or Arrow keys
+            if pygame.K_w in self.keys_pressed or pygame.K_UP in self.keys_pressed:
+                move_y -= 1
+            if pygame.K_s in self.keys_pressed or pygame.K_DOWN in self.keys_pressed:
+                move_y += 1
+            if pygame.K_a in self.keys_pressed or pygame.K_LEFT in self.keys_pressed:
+                move_x -= 1
+            if pygame.K_d in self.keys_pressed or pygame.K_RIGHT in self.keys_pressed:
+                move_x += 1
+        elif self.player_id == 1:
+            # Player 2: IJKL keys
+            if pygame.K_i in self.keys_pressed:
+                move_y -= 1
+            if pygame.K_k in self.keys_pressed:
+                move_y += 1
+            if pygame.K_j in self.keys_pressed:
+                move_x -= 1
+            if pygame.K_l in self.keys_pressed:
+                move_x += 1
+        elif self.player_id == 2:
+            # Player 3: TFGH keys
+            if pygame.K_t in self.keys_pressed:
+                move_y -= 1
+            if pygame.K_g in self.keys_pressed:
+                move_y += 1
+            if pygame.K_f in self.keys_pressed:
+                move_x -= 1
+            if pygame.K_h in self.keys_pressed:
+                move_x += 1
 
         # Normalize diagonal movement
         if move_x != 0 and move_y != 0:
