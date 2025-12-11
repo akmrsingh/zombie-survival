@@ -1277,21 +1277,13 @@ class Player:
         self.x = max(self.size, min(game_world.width - self.size, self.x))
         self.y = max(self.size, min(game_world.height - self.size, self.y))
 
-        # Aim towards mouse, auto-aim, or manual keys (8/9 for Player 2)
-        if self.auto_aim and game_world.zombies:
-            # Find nearest zombie
-            nearest_dist = float('inf')
-            nearest_zombie = None
-            for zombie in game_world.zombies:
-                dist = math.sqrt((zombie.x - self.x)**2 + (zombie.y - self.y)**2)
-                if dist < nearest_dist:
-                    nearest_dist = dist
-                    nearest_zombie = zombie
-            if nearest_zombie and nearest_dist < 500:  # Only aim if zombie is close
-                self.angle = math.atan2(nearest_zombie.y - self.y, nearest_zombie.x - self.x)
-                self.auto_shoot = True
-            else:
-                self.auto_shoot = False
+        # Aim: Player 1 uses mouse, Player 2 uses 8/9, Player 3 uses 6/7
+        if self.player_id == 0:
+            # Player 1: Mouse aim
+            screen_center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+            dx = self.mouse_pos[0] - screen_center[0]
+            dy = self.mouse_pos[1] - screen_center[1]
+            self.angle = math.atan2(dy, dx)
         elif self.player_id == 1:
             # Player 2: Manual aim with 8/9 keys (continuous rotation while held)
             aim_speed = 3.0  # Radians per second
@@ -1299,12 +1291,13 @@ class Player:
                 self.angle -= aim_speed * dt  # Rotate left
             if pygame.K_9 in self.keys_pressed:
                 self.angle += aim_speed * dt  # Rotate right
-        else:
-            # Player 1: Mouse aim
-            screen_center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-            dx = self.mouse_pos[0] - screen_center[0]
-            dy = self.mouse_pos[1] - screen_center[1]
-            self.angle = math.atan2(dy, dx)
+        elif self.player_id == 2:
+            # Player 3: Manual aim with 6/7 keys (continuous rotation while held)
+            aim_speed = 3.0  # Radians per second
+            if pygame.K_6 in self.keys_pressed:
+                self.angle -= aim_speed * dt  # Rotate left
+            if pygame.K_7 in self.keys_pressed:
+                self.angle += aim_speed * dt  # Rotate right
 
         # Cooldowns
         self.fire_cooldown -= dt
@@ -2496,9 +2489,8 @@ class Game:
                 i,
                 self.selected_class[i]
             )
-            # Player 2 uses manual aim with 8/9 keys, Player 3+ use auto-aim
-            if i >= 2:
-                player.auto_aim = True
+            # Player 2 uses 8/9 to aim, Player 3 uses 6/7 to aim
+            # No auto-aim for any player now
             self.local_players.append(player)
             self.world.players.append(player)
 
@@ -2679,10 +2671,10 @@ class Game:
                     # Spacebar to shoot for Player 2
                     player2.mouse_buttons[0] = True
 
-            # Player 3 controls (TFGH movement, R/Y weapons, V ability)
+            # Player 3 controls (TFGH movement, R/Y weapons, V ability, 6/7 aim, B shoot)
             if len(self.local_players) > 2:
                 player3 = self.local_players[2]
-                if event.key in [pygame.K_t, pygame.K_f, pygame.K_g, pygame.K_h]:
+                if event.key in [pygame.K_t, pygame.K_f, pygame.K_g, pygame.K_h, pygame.K_6, pygame.K_7]:
                     player3.keys_pressed.add(event.key)
                 elif event.key == pygame.K_r:
                     player3.switch_weapon(-1)  # Previous weapon
@@ -2690,6 +2682,9 @@ class Game:
                     player3.switch_weapon(1)   # Next weapon
                 elif event.key == pygame.K_v:
                     player3.use_ability(self.world)
+                elif event.key == pygame.K_b:
+                    # B to shoot for Player 3
+                    player3.mouse_buttons[0] = True
 
         elif event.type == pygame.KEYUP:
             if len(self.local_players) > 0:
@@ -2708,6 +2703,9 @@ class Game:
             if len(self.local_players) > 2:
                 player3 = self.local_players[2]
                 player3.keys_pressed.discard(event.key)
+                # Stop shooting when B released
+                if event.key == pygame.K_b:
+                    player3.mouse_buttons[0] = False
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if len(self.local_players) > 0:
