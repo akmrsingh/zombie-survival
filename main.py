@@ -1536,7 +1536,7 @@ class Player:
         """Rotate block placement direction for Builder."""
         if self.player_class == PlayerClass.BUILDER:
             self.block_rotation = (self.block_rotation + 90) % 360
-            self.show_block_preview = True
+            # Keep preview showing while rotating
 
     def draw(self, screen, camera_offset, is_local=True):
         draw_x = int(self.x - camera_offset[0])
@@ -2617,14 +2617,20 @@ class Game:
                 elif event.key == pygame.K_e:
                     player.switch_weapon(1)   # Next weapon
                 elif event.key == pygame.K_z:
-                    # Z key: Ability OR rotate block preview for Builder
-                    if player.player_class == PlayerClass.BUILDER:
-                        player.rotate_block()  # Rotate and show preview
+                    # Z key: Place wall (Builder) or use ability (other classes)
                     player.use_ability(self.world)
-                elif event.key == pygame.K_c:
-                    # C key: Just rotate block (for Builder)
+                    # Hide preview after placing for Builder
                     if player.player_class == PlayerClass.BUILDER:
-                        player.rotate_block()
+                        player.show_block_preview = False
+                elif event.key == pygame.K_c:
+                    # C key: Toggle blueprint preview and rotate (Builder only)
+                    if player.player_class == PlayerClass.BUILDER:
+                        if player.show_block_preview:
+                            # If preview is showing, rotate it
+                            player.rotate_block()
+                        else:
+                            # If preview is hidden, show it
+                            player.show_block_preview = True
                 elif event.key == pygame.K_b:
                     # Class switch in bunker
                     if self.world.bunker.is_player_inside(player):
