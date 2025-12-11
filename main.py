@@ -3044,6 +3044,62 @@ class Game:
         pygame.draw.line(self.screen, WHITE, (mouse_pos[0], mouse_pos[1] - 15), (mouse_pos[0], mouse_pos[1] - 5), 2)
         pygame.draw.line(self.screen, WHITE, (mouse_pos[0], mouse_pos[1] + 5), (mouse_pos[0], mouse_pos[1] + 15), 2)
 
+        # Draw minimap (bottom-right corner)
+        minimap_size = 150
+        minimap_x = SCREEN_WIDTH - minimap_size - 20
+        minimap_y = SCREEN_HEIGHT - minimap_size - 100
+        scale = minimap_size / self.world.width
+
+        # Minimap background
+        minimap_bg = pygame.Surface((minimap_size, minimap_size))
+        minimap_bg.fill((30, 30, 30))
+        minimap_bg.set_alpha(180)
+        self.screen.blit(minimap_bg, (minimap_x, minimap_y))
+
+        # Minimap border
+        pygame.draw.rect(self.screen, WHITE, (minimap_x, minimap_y, minimap_size, minimap_size), 2)
+
+        # Draw bunker on minimap
+        bunker_mx = int(minimap_x + self.world.bunker.x * scale)
+        bunker_my = int(minimap_y + self.world.bunker.y * scale)
+        bunker_mw = int(self.world.bunker.width * scale)
+        bunker_mh = int(self.world.bunker.height * scale)
+        pygame.draw.rect(self.screen, (100, 100, 100), (bunker_mx - bunker_mw//2, bunker_my - bunker_mh//2, bunker_mw, bunker_mh))
+
+        # Draw zombies on minimap (red dots)
+        for zombie in self.world.zombies:
+            zx = int(minimap_x + zombie.x * scale)
+            zy = int(minimap_y + zombie.y * scale)
+            # Make sure dot is within minimap bounds
+            if minimap_x <= zx <= minimap_x + minimap_size and minimap_y <= zy <= minimap_y + minimap_size:
+                # Different colors for different zombie types
+                if zombie.zombie_type == "zombie_king":
+                    pygame.draw.circle(self.screen, PURPLE, (zx, zy), 4)
+                elif zombie.zombie_type == "cage_walker":
+                    pygame.draw.circle(self.screen, ORANGE, (zx, zy), 3)
+                elif zombie.zombie_type == "tank":
+                    pygame.draw.circle(self.screen, (150, 50, 50), (zx, zy), 2)
+                else:
+                    pygame.draw.circle(self.screen, RED, (zx, zy), 1)
+
+        # Draw players on minimap (colored dots)
+        for p in self.world.players:
+            px = int(minimap_x + p.x * scale)
+            py = int(minimap_y + p.y * scale)
+            pygame.draw.circle(self.screen, p.color, (px, py), 4)
+            pygame.draw.circle(self.screen, WHITE, (px, py), 4, 1)
+
+        # Draw camera view rectangle
+        cam_x = int(minimap_x + self.camera_offset[0] * scale)
+        cam_y = int(minimap_y + self.camera_offset[1] * scale)
+        cam_w = int(SCREEN_WIDTH * scale)
+        cam_h = int(SCREEN_HEIGHT * scale)
+        pygame.draw.rect(self.screen, (255, 255, 255, 100), (cam_x, cam_y, cam_w, cam_h), 1)
+
+        # Minimap label
+        map_label = pygame.font.Font(None, 18).render("MAP", True, WHITE)
+        self.screen.blit(map_label, (minimap_x + minimap_size//2 - map_label.get_width()//2, minimap_y - 15))
+
         # Draw touch controls
         if self.touch_enabled:
             self.move_joystick.draw(self.screen)
