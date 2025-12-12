@@ -1425,8 +1425,11 @@ class Player:
                         # 3 shots to kill
                         knife_damage = zombie.max_health / 3
                     elif zombie.zombie_type == "spitter":
-                        # 5 shots to kill (radioactive)
+                        # 5 shots to kill
                         knife_damage = zombie.max_health / 5
+                    elif zombie.zombie_type == "radioactive":
+                        # 6 shots to kill (green glowing)
+                        knife_damage = zombie.max_health / 6
                     elif zombie.zombie_type == "cage_walker":
                         # 60 shots to kill
                         knife_damage = zombie.max_health / 60
