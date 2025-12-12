@@ -2254,14 +2254,7 @@ class GameWorld:
                                 self.bullets.remove(bullet)
                             break
 
-            # Check wall collisions (walls always stop bullets)
-            if bullet.active:
-                for wall in self.walls:
-                    if wall.active and wall.get_rect().collidepoint(bullet.x, bullet.y):
-                        bullet.active = False
-                        if bullet in self.bullets:
-                            self.bullets.remove(bullet)
-                        break
+            # Bullets pass through builder walls (removed wall collision)
 
         # Update walls
         for wall in self.walls[:]:
