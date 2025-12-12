@@ -1072,12 +1072,14 @@ class Player:
         self.reserve_ammo = self.weapons[0].max_ammo if self.weapons else 0
         self.fire_cooldown = 0
         self.reload_timer = 0
+        self.reload_time_max = 0  # Store max reload time for animation
         self.is_reloading = False
         self.recoil_offset = 0  # Current recoil affecting accuracy
         self.screen_shake = 0  # Visual feedback for heavy weapons
         self.muzzle_flash_timer = 0  # Muzzle flash effect
         self.shell_casings = []  # Ejected shell casings
         self.gun_kick = 0  # Visual gun kickback
+        self.reload_anim_angle = 0  # Gun rotation during reload
 
         # Movement
         self.vx = 0
@@ -1329,15 +1331,24 @@ class Player:
             if shell['lifetime'] <= 0:
                 self.shell_casings.remove(shell)
 
-        # Reloading
+        # Reloading with animation
         if self.is_reloading:
             self.reload_timer -= dt
+            # Calculate reload animation (gun rotates down and back up)
+            if self.reload_time_max > 0:
+                progress = 1 - (self.reload_timer / self.reload_time_max)
+                # Smooth animation: rotate down first half, rotate back up second half
+                if progress < 0.5:
+                    self.reload_anim_angle = progress * 2 * 45  # 0 to 45 degrees
+                else:
+                    self.reload_anim_angle = (1 - progress) * 2 * 45  # 45 to 0 degrees
             if self.reload_timer <= 0:
                 ammo_needed = self.current_weapon.mag_size - self.current_ammo
                 ammo_to_add = min(ammo_needed, self.reserve_ammo)
                 self.current_ammo += ammo_to_add
                 self.reserve_ammo -= ammo_to_add
                 self.is_reloading = False
+                self.reload_anim_angle = 0
 
         # Shooting (mouse or auto-shoot for P2)
         shooting = self.mouse_buttons[0] or self.auto_shoot
@@ -1461,6 +1472,7 @@ class Player:
         if not self.is_reloading and self.reserve_ammo > 0 and self.current_ammo < self.current_weapon.mag_size:
             self.is_reloading = True
             self.reload_timer = self.current_weapon.reload_time
+            self.reload_time_max = self.current_weapon.reload_time
 
     def use_ability(self, game_world):
         # Dead players can't use abilities
@@ -1608,13 +1620,16 @@ class Player:
         weapon = self.current_weapon
         kick = self.gun_kick
 
+        # Gun angle with reload animation (gun rotates down during reload)
+        gun_angle = self.angle + math.radians(self.reload_anim_angle)
+
         # Gun position (attached to player)
-        gun_x = draw_x + math.cos(self.angle) * (self.size - kick * 0.3)
-        gun_y = draw_y + math.sin(self.angle) * (self.size - kick * 0.3)
+        gun_x = draw_x + math.cos(gun_angle) * (self.size - kick * 0.3)
+        gun_y = draw_y + math.sin(gun_angle) * (self.size - kick * 0.3)
 
         # Rotate gun graphics based on angle
-        cos_a = math.cos(self.angle)
-        sin_a = math.sin(self.angle)
+        cos_a = math.cos(gun_angle)
+        sin_a = math.sin(gun_angle)
 
         # Perpendicular for gun height
         perp_x = -sin_a
@@ -2576,8 +2591,10 @@ class Game:
                 if self.changing_class_in_bunker:
                     # Just update player classes without resetting
                     for i, player in enumerate(self.local_players):
+                        old_health_percent = player.health / player.max_health
                         player.setup_class(self.selected_class[i])
-                        player.health = player.max_health
+                        # Keep health percentage and start with full ammo for new class
+                        player.health = int(old_health_percent * player.max_health)
                         player.current_weapon_index = 0
                         player.current_ammo = player.weapons[0].mag_size
                         player.reserve_ammo = player.weapons[0].max_ammo
