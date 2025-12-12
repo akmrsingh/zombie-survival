@@ -2462,6 +2462,7 @@ class Game:
         # Class selection
         self.selected_class = [PlayerClass.RANGER] * 4
         self.class_confirmed = [False] * 4
+        self.changing_class_in_bunker = False  # Flag for in-game class change
 
         # Input for IP
         self.ip_input = ""
@@ -2572,11 +2573,25 @@ class Game:
 
             # Check if all players confirmed
             if all(self.class_confirmed[:self.num_local_players]):
-                self.reset_game()
+                if self.changing_class_in_bunker:
+                    # Just update player classes without resetting
+                    for i, player in enumerate(self.local_players):
+                        player.setup_class(self.selected_class[i])
+                        player.health = player.max_health
+                        player.current_weapon_index = 0
+                        player.current_ammo = player.weapons[0].mag_size
+                        player.reserve_ammo = player.weapons[0].max_ammo
+                    self.changing_class_in_bunker = False
+                else:
+                    self.reset_game()
                 self.state = GameState.PLAYING
 
             if event.key == pygame.K_ESCAPE:
-                self.state = GameState.MENU
+                if self.changing_class_in_bunker:
+                    self.changing_class_in_bunker = False
+                    self.state = GameState.PLAYING
+                else:
+                    self.state = GameState.MENU
 
         # Touch/click support for class selection
         elif event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.FINGERDOWN:
@@ -2664,8 +2679,12 @@ class Game:
                 elif event.key == pygame.K_b:
                     # Class switch in bunker
                     if self.world.bunker.is_player_inside(player):
+                        self.changing_class_in_bunker = True
+                        # Set current classes as selected
+                        for i, p in enumerate(self.local_players):
+                            self.selected_class[i] = p.player_class
                         self.state = GameState.CLASS_SELECT
-                        self.class_confirmed = [False] * 3
+                        self.class_confirmed = [False] * 4
 
             # Player 2 controls (IJKL movement, U/O weapons, M ability, 8/9 aim, Space shoot)
             if len(self.local_players) > 1:
