@@ -88,4 +88,5 @@ jobs:
         path: build/web/
         project: akmrsingh/zombie-survival
         channel: html5
-        api-key: ${{ secrets.ITCH_API_KEY }}
+      env:
+        BUTLER_API_KEY: ${{ secrets.ITCH_API_KEY }}
