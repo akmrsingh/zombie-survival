@@ -1416,13 +1416,13 @@ class Player:
                         elif stage == 6:
                             knife_damage = zombie.max_health / 10000000
                         elif stage == 7:
-                            knife_damage = zombie.max_health / 10000000
-                        elif stage == 8:
                             knife_damage = zombie.max_health / 100000000
-                        elif stage == 9:
+                        elif stage == 8:
                             knife_damage = zombie.max_health / 1000000000
-                        else:  # stage 10+
+                        elif stage == 9:
                             knife_damage = zombie.max_health / 10000000000
+                        else:  # stage 10+
+                            knife_damage = zombie.max_health / 100000000000
                     else:
                         # Instant kill regular zombies (normal, runner, crawler, bloater, etc.)
                         knife_damage = 9999
