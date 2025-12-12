@@ -2066,6 +2066,8 @@ class GameWorld:
         self.zombies_to_spawn = 10 + wave_num * 5
         self.wave_active = True
         self.spawn_timer = 0
+        # Restore bunker health to full at start of each wave
+        self.bunker.health = self.bunker.max_health
 
     def spawn_zombie(self):
         # Spawn at edge of map
