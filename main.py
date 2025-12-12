@@ -2546,18 +2546,31 @@ class Game:
             elif event.key == pygame.K_SPACE:
                 self.class_confirmed[0] = True
 
-            # Player 2 controls (Arrow keys + Enter) - if 2+ players
+            # Player 2 controls (J/L + Enter) - if 2+ players
             if self.num_local_players >= 2:
-                if event.key == pygame.K_LEFT:
+                if event.key == pygame.K_j:
                     idx = self.selected_class[1].value - 1
                     idx = (idx - 1) % 4 + 1
                     self.selected_class[1] = PlayerClass(idx)
-                elif event.key == pygame.K_RIGHT:
+                elif event.key == pygame.K_l:
                     idx = self.selected_class[1].value - 1
                     idx = (idx + 1) % 4 + 1
                     self.selected_class[1] = PlayerClass(idx)
                 elif event.key == pygame.K_RETURN:
                     self.class_confirmed[1] = True
+
+            # Player 3 controls (F/H + Tab) - if 3 players
+            if self.num_local_players >= 3:
+                if event.key == pygame.K_f:
+                    idx = self.selected_class[2].value - 1
+                    idx = (idx - 1) % 4 + 1
+                    self.selected_class[2] = PlayerClass(idx)
+                elif event.key == pygame.K_h:
+                    idx = self.selected_class[2].value - 1
+                    idx = (idx + 1) % 4 + 1
+                    self.selected_class[2] = PlayerClass(idx)
+                elif event.key == pygame.K_TAB:
+                    self.class_confirmed[2] = True
 
             # Check if all players confirmed
             if all(self.class_confirmed[:self.num_local_players]):
@@ -2965,13 +2978,16 @@ class Game:
                 dy += 35
 
         # Instructions
-        inst_y = SCREEN_HEIGHT - 120
+        inst_y = SCREEN_HEIGHT - 140
         if self.num_local_players >= 1:
             inst1 = self.font_small.render("P1: A/D to select, SPACE to confirm", True, WHITE)
             self.screen.blit(inst1, (SCREEN_WIDTH//2 - inst1.get_width()//2, inst_y))
         if self.num_local_players >= 2:
-            inst2 = self.font_small.render("P2: LEFT/RIGHT to select, ENTER to confirm", True, WHITE)
-            self.screen.blit(inst2, (SCREEN_WIDTH//2 - inst2.get_width()//2, inst_y + 35))
+            inst2 = self.font_small.render("P2: J/L to select, ENTER to confirm", True, WHITE)
+            self.screen.blit(inst2, (SCREEN_WIDTH//2 - inst2.get_width()//2, inst_y + 30))
+        if self.num_local_players >= 3:
+            inst3 = self.font_small.render("P3: F/H to select, TAB to confirm", True, WHITE)
+            self.screen.blit(inst3, (SCREEN_WIDTH//2 - inst3.get_width()//2, inst_y + 60))
 
     def draw_host_screen(self):
         self.screen.fill(BLACK)
