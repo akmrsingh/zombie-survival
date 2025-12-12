@@ -1309,7 +1309,15 @@ class Player:
                     dx = nearest_zombie.x - self.x
                     dy = nearest_zombie.y - self.y
                     self.angle = math.atan2(dy, dx)
+                    # Auto-fire when targeting a zombie
+                    self.mouse_buttons[0] = True
+                else:
+                    # No zombie found, stop firing
+                    self.mouse_buttons[0] = False
             else:
+                # No zombies, stop firing
+                if self.auto_aim:
+                    self.mouse_buttons[0] = False
                 # Manual aim with 6/7 keys (continuous rotation while held)
                 aim_speed = 3.0  # Radians per second
                 if pygame.K_6 in self.keys_pressed:
@@ -2564,10 +2572,9 @@ class Game:
                 self.selected_class[i]
             )
             # Player 2 uses 8/9 to aim, Player 3 uses 6/7 to aim
-            # Player 3 has auto-aim, auto-shoot and unlimited ammo for testing
+            # Player 3 has auto-aim (fires only when zombie present) and unlimited ammo
             if i == 2:
                 player.auto_aim = True
-                player.auto_shoot = True
                 player.unlimited_ammo = True
             self.local_players.append(player)
             self.world.players.append(player)
