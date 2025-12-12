@@ -1296,12 +1296,26 @@ class Player:
             if pygame.K_9 in self.keys_pressed:
                 self.angle += aim_speed * dt  # Rotate right
         elif self.player_id == 2:
-            # Player 3: Manual aim with 6/7 keys (continuous rotation while held)
-            aim_speed = 3.0  # Radians per second
-            if pygame.K_6 in self.keys_pressed:
-                self.angle -= aim_speed * dt  # Rotate left
-            if pygame.K_7 in self.keys_pressed:
-                self.angle += aim_speed * dt  # Rotate right
+            # Player 3: Auto-aim at nearest zombie
+            if self.auto_aim and game_world.zombies:
+                nearest_zombie = None
+                nearest_dist = float('inf')
+                for zombie in game_world.zombies:
+                    dist = math.sqrt((zombie.x - self.x)**2 + (zombie.y - self.y)**2)
+                    if dist < nearest_dist:
+                        nearest_dist = dist
+                        nearest_zombie = zombie
+                if nearest_zombie:
+                    dx = nearest_zombie.x - self.x
+                    dy = nearest_zombie.y - self.y
+                    self.angle = math.atan2(dy, dx)
+            else:
+                # Manual aim with 6/7 keys (continuous rotation while held)
+                aim_speed = 3.0  # Radians per second
+                if pygame.K_6 in self.keys_pressed:
+                    self.angle -= aim_speed * dt  # Rotate left
+                if pygame.K_7 in self.keys_pressed:
+                    self.angle += aim_speed * dt  # Rotate right
 
         # Cooldowns
         self.fire_cooldown -= dt
@@ -2550,10 +2564,9 @@ class Game:
                 self.selected_class[i]
             )
             # Player 2 uses 8/9 to aim, Player 3 uses 6/7 to aim
-            # No auto-aim for any player now
-            # Player 3 has auto-shoot and unlimited ammo for testing
+            # Player 3 has auto-aim and unlimited ammo for testing
             if i == 2:
-                player.auto_shoot = True
+                player.auto_aim = True
                 player.unlimited_ammo = True
             self.local_players.append(player)
             self.world.players.append(player)
