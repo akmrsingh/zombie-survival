@@ -2564,9 +2564,10 @@ class Game:
                 self.selected_class[i]
             )
             # Player 2 uses 8/9 to aim, Player 3 uses 6/7 to aim
-            # Player 3 has auto-aim and unlimited ammo for testing
+            # Player 3 has auto-aim, auto-shoot and unlimited ammo for testing
             if i == 2:
                 player.auto_aim = True
+                player.auto_shoot = True
                 player.unlimited_ammo = True
             self.local_players.append(player)
             self.world.players.append(player)
