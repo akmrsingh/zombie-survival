@@ -1422,8 +1422,8 @@ class Player:
                 if dist < 50:  # Hit range
                     # Calculate knife damage based on zombie type
                     if zombie.zombie_type == "tank":
-                        # 3 shots to kill
-                        knife_damage = zombie.max_health / 3
+                        # 6 shots to kill
+                        knife_damage = zombie.max_health / 6
                     elif zombie.zombie_type == "spitter":
                         # 5 shots to kill (radioactive)
                         knife_damage = zombie.max_health / 5
