@@ -1098,6 +1098,7 @@ class Player:
         self.mouse_buttons = [False, False, False]
         self.auto_aim = False  # For P2+ who can't use mouse
         self.auto_shoot = False  # P2 auto-shoots at enemies
+        self.unlimited_ammo = False  # For testing
 
         # HP Regeneration
         self.regen_timer = 0  # Timer for HP regen
@@ -1444,7 +1445,8 @@ class Player:
             return  # Don't shoot bullets for melee
 
         # Regular gun shooting
-        self.current_ammo -= 1
+        if not self.unlimited_ammo:
+            self.current_ammo -= 1
 
         # Apply recoil to spread - accuracy degrades with rapid fire
         effective_spread = weapon.spread + self.recoil_offset
@@ -2549,6 +2551,10 @@ class Game:
             )
             # Player 2 uses 8/9 to aim, Player 3 uses 6/7 to aim
             # No auto-aim for any player now
+            # Player 3 has auto-shoot and unlimited ammo for testing
+            if i == 2:
+                player.auto_shoot = True
+                player.unlimited_ammo = True
             self.local_players.append(player)
             self.world.players.append(player)
 
