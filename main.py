@@ -1414,7 +1414,7 @@ class Player:
                         elif stage == 5:
                             knife_damage = zombie.max_health / 1000000
                         elif stage == 6:
-                            knife_damage = zombie.max_health / 10000000
+                            knife_damage = zombie.max_health / 1000000
                         elif stage == 7:
                             knife_damage = zombie.max_health / 10000000
                         elif stage == 8:
