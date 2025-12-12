@@ -1390,13 +1390,45 @@ class Player:
             for zombie in game_world.zombies[:]:
                 dist = math.sqrt((zombie.x - slash_x)**2 + (zombie.y - slash_y)**2)
                 if dist < 50:  # Hit range
-                    # Check if boss (don't instant kill bosses)
-                    if zombie.zombie_type in ["cage_walker", "zombie_king"]:
-                        # Do reduced damage to bosses
-                        zombie.take_damage(50, self.angle)
+                    # Calculate knife damage based on zombie type
+                    if zombie.zombie_type == "tank":
+                        # 3 shots to kill
+                        knife_damage = zombie.max_health / 3
+                    elif zombie.zombie_type == "spitter":
+                        # 5 shots to kill (radioactive)
+                        knife_damage = zombie.max_health / 5
+                    elif zombie.zombie_type == "cage_walker":
+                        # 60 shots to kill
+                        knife_damage = zombie.max_health / 60
+                    elif zombie.zombie_type == "zombie_king":
+                        # Shots based on king stage
+                        stage = getattr(zombie, 'king_stage', 1)
+                        if stage == 1:
+                            knife_damage = zombie.max_health / 100
+                        elif stage == 2:
+                            knife_damage = zombie.max_health / 1000
+                        elif stage == 3:
+                            knife_damage = zombie.max_health / 10000
+                        elif stage == 4:
+                            knife_damage = zombie.max_health / 100000
+                        elif stage == 5:
+                            knife_damage = zombie.max_health / 1000000
+                        elif stage == 6:
+                            knife_damage = zombie.max_health / 10000000
+                        elif stage == 7:
+                            knife_damage = zombie.max_health / 10000000
+                        elif stage == 8:
+                            knife_damage = zombie.max_health / 100000000
+                        elif stage == 9:
+                            knife_damage = zombie.max_health / 1000000000
+                        else:  # stage 10+
+                            knife_damage = zombie.max_health / 10000000000
                     else:
-                        # Instant kill regular zombies!
-                        zombie.take_damage(9999, self.angle)
+                        # Instant kill regular zombies (normal, runner, crawler, bloater, etc.)
+                        knife_damage = 9999
+
+                    zombie.take_damage(knife_damage, self.angle)
+                    if zombie.health <= 0:
                         game_world.kills += 1
                         game_world.score += 100
 
