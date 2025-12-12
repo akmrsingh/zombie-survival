@@ -2459,8 +2459,8 @@ class Game:
         self.font_medium = pygame.font.Font(None, 48)
         self.font_small = pygame.font.Font(None, 32)
 
-        # Class selection - each player starts with different class
-        self.selected_class = [PlayerClass.RANGER, PlayerClass.BUILDER, PlayerClass.HEALER, PlayerClass.TANK]
+        # Class selection
+        self.selected_class = [PlayerClass.RANGER] * 4
         self.class_confirmed = [False] * 4
 
         # Input for IP
@@ -2949,28 +2949,22 @@ class Game:
             rect = pygame.Rect(x, y, box_width, box_height)
             pygame.draw.rect(self.screen, color, rect, 3)
 
-            # Find which players have this class selected
-            players_on_class = []
+            # Highlight if selected
             for p_idx in range(self.num_local_players):
                 if self.selected_class[p_idx] == pc:
-                    players_on_class.append(p_idx)
+                    if self.class_confirmed[p_idx]:
+                        pygame.draw.rect(self.screen, color, rect)
+                        text_color = BLACK
+                    else:
+                        pygame.draw.rect(self.screen, (*color[:3], 100), rect)
+                        text_color = WHITE
 
-            # Highlight if any player has it selected
-            text_color = WHITE
-            if players_on_class:
-                # Check if any confirmed
-                any_confirmed = any(self.class_confirmed[p] for p in players_on_class)
-                if any_confirmed:
-                    pygame.draw.rect(self.screen, color, rect)
-                    text_color = BLACK
-                else:
-                    pygame.draw.rect(self.screen, (*color[:3], 100), rect)
-                    text_color = WHITE
-
-                # Show all player indicators
-                p_labels = [f"P{p+1}" for p in players_on_class]
-                p_text = self.font_small.render(" ".join(p_labels), True, WHITE if any_confirmed else color)
-                self.screen.blit(p_text, (x + box_width//2 - p_text.get_width()//2, y + box_height + 10))
+                    # Player indicator
+                    p_text = self.font_small.render(f"P{p_idx + 1}", True, WHITE if self.class_confirmed[p_idx] else color)
+                    self.screen.blit(p_text, (x + box_width//2 - p_text.get_width()//2, y + box_height + 10))
+                    break
+            else:
+                text_color = WHITE
 
             # Class name
             name_text = self.font_medium.render(name, True, text_color)
