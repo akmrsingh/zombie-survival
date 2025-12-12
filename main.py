@@ -1080,6 +1080,7 @@ class Player:
         self.shell_casings = []  # Ejected shell casings
         self.gun_kick = 0  # Visual gun kickback
         self.reload_anim_angle = 0  # Gun rotation during reload
+        self.recoil_angle = 0  # Visual angle kick when shooting
 
         # Movement
         self.vx = 0
@@ -1321,6 +1322,13 @@ class Player:
         if self.gun_kick > 0:
             self.gun_kick = max(0, self.gun_kick - 80 * dt)
 
+        # Recoil angle recovery (aim returns to original position)
+        if self.recoil_angle != 0:
+            # Smooth return to 0
+            self.recoil_angle *= 0.85  # Decay
+            if abs(self.recoil_angle) < 0.5:
+                self.recoil_angle = 0
+
         # Update shell casings
         for shell in self.shell_casings[:]:
             shell['x'] += shell['vx'] * dt
@@ -1413,14 +1421,16 @@ class Player:
         self.recoil_offset = min(self.recoil_offset + weapon.recoil, weapon.spread * 3)
 
         # Gun kick visual effect (gun moves back then returns)
-        self.gun_kick = min(weapon.recoil * 3, 15)
+        self.gun_kick = min(weapon.recoil * 4, 20)
+
+        # Recoil angle kick (aim jumps up/back)
+        self.recoil_angle -= weapon.recoil * 3  # Negative = kicks up/back
 
         # Muzzle flash effect
         self.muzzle_flash_timer = 0.05  # Flash lasts 50ms
 
-        # Screen shake for heavy weapons
-        if weapon.recoil >= 4.0:
-            self.screen_shake = weapon.recoil * 2
+        # Screen shake for all weapons (scaled by recoil)
+        self.screen_shake = min(weapon.recoil * 1.5, 10)
 
         # Create bullets
         for _ in range(weapon.bullet_count):
@@ -1620,8 +1630,8 @@ class Player:
         weapon = self.current_weapon
         kick = self.gun_kick
 
-        # Gun angle with reload animation (gun rotates down during reload)
-        gun_angle = self.angle + math.radians(self.reload_anim_angle)
+        # Gun angle with reload animation and recoil kick
+        gun_angle = self.angle + math.radians(self.reload_anim_angle + self.recoil_angle)
 
         # Gun position (attached to player)
         gun_x = draw_x + math.cos(gun_angle) * (self.size - kick * 0.3)
@@ -2884,6 +2894,13 @@ class Game:
                 target_y = camera_target.y - SCREEN_HEIGHT // 2
                 self.camera_offset[0] += (target_x - self.camera_offset[0]) * 5 * dt
                 self.camera_offset[1] += (target_y - self.camera_offset[1]) * 5 * dt
+
+                # Apply screen shake from player recoil
+                if camera_target.screen_shake > 0:
+                    shake_x = random.uniform(-camera_target.screen_shake, camera_target.screen_shake)
+                    shake_y = random.uniform(-camera_target.screen_shake, camera_target.screen_shake)
+                    self.camera_offset[0] += shake_x
+                    self.camera_offset[1] += shake_y
 
                 # Clamp camera
                 self.camera_offset[0] = max(0, min(self.world.width - SCREEN_WIDTH, self.camera_offset[0]))
