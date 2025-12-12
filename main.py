@@ -1099,6 +1099,7 @@ class Player:
         self.auto_aim = False  # For P2+ who can't use mouse
         self.auto_shoot = False  # P2 auto-shoots at enemies
         self.unlimited_ammo = False  # For testing
+        self.invincible = False  # For testing
 
         # HP Regeneration
         self.regen_timer = 0  # Timer for HP regen
@@ -1196,6 +1197,8 @@ class Player:
         return self.weapons[self.current_weapon_index]
 
     def take_damage(self, damage):
+        if self.invincible:
+            return  # No damage when invincible
         self.health -= damage
         if self.health < 0:
             self.health = 0
@@ -1300,6 +1303,7 @@ class Player:
             if self.auto_aim and game_world.zombies:
                 nearest_zombie = None
                 nearest_dist = float('inf')
+                shooting_range = self.current_weapon.range  # Use weapon range
                 for zombie in game_world.zombies:
                     dist = math.sqrt((zombie.x - self.x)**2 + (zombie.y - self.y)**2)
                     if dist < nearest_dist:
@@ -1309,8 +1313,11 @@ class Player:
                     dx = nearest_zombie.x - self.x
                     dy = nearest_zombie.y - self.y
                     self.angle = math.atan2(dy, dx)
-                    # Auto-fire when targeting a zombie
-                    self.mouse_buttons[0] = True
+                    # Only auto-fire if zombie is in shooting range
+                    if nearest_dist <= shooting_range:
+                        self.mouse_buttons[0] = True
+                    else:
+                        self.mouse_buttons[0] = False
                 else:
                     # No zombie found, stop firing
                     self.mouse_buttons[0] = False
@@ -2572,10 +2579,11 @@ class Game:
                 self.selected_class[i]
             )
             # Player 2 uses 8/9 to aim, Player 3 uses 6/7 to aim
-            # Player 3 has auto-aim (fires only when zombie present) and unlimited ammo
+            # Player 3 has auto-aim, unlimited ammo, and invincibility for testing
             if i == 2:
                 player.auto_aim = True
                 player.unlimited_ammo = True
+                player.invincible = True
             self.local_players.append(player)
             self.world.players.append(player)
 
