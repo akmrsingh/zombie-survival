@@ -2547,30 +2547,28 @@ class Game:
                 self.class_confirmed[0] = True
 
             # Player 2 controls (J/L + Enter) - if 2+ players
-            if self.num_local_players >= 2:
-                if event.key == pygame.K_j:
-                    idx = self.selected_class[1].value - 1
-                    idx = (idx - 1) % 4 + 1
-                    self.selected_class[1] = PlayerClass(idx)
-                elif event.key == pygame.K_l:
-                    idx = self.selected_class[1].value - 1
-                    idx = (idx + 1) % 4 + 1
-                    self.selected_class[1] = PlayerClass(idx)
-                elif event.key == pygame.K_RETURN:
-                    self.class_confirmed[1] = True
+            if self.num_local_players >= 2 and event.key == pygame.K_j:
+                idx = self.selected_class[1].value - 1
+                idx = (idx - 1) % 4 + 1
+                self.selected_class[1] = PlayerClass(idx)
+            if self.num_local_players >= 2 and event.key == pygame.K_l:
+                idx = self.selected_class[1].value - 1
+                idx = (idx + 1) % 4 + 1
+                self.selected_class[1] = PlayerClass(idx)
+            if self.num_local_players >= 2 and event.key == pygame.K_RETURN:
+                self.class_confirmed[1] = True
 
             # Player 3 controls (F/H + Tab) - if 3 players
-            if self.num_local_players >= 3:
-                if event.key == pygame.K_f:
-                    idx = self.selected_class[2].value - 1
-                    idx = (idx - 1) % 4 + 1
-                    self.selected_class[2] = PlayerClass(idx)
-                elif event.key == pygame.K_h:
-                    idx = self.selected_class[2].value - 1
-                    idx = (idx + 1) % 4 + 1
-                    self.selected_class[2] = PlayerClass(idx)
-                elif event.key == pygame.K_TAB:
-                    self.class_confirmed[2] = True
+            if self.num_local_players >= 3 and event.key == pygame.K_f:
+                idx = self.selected_class[2].value - 1
+                idx = (idx - 1) % 4 + 1
+                self.selected_class[2] = PlayerClass(idx)
+            if self.num_local_players >= 3 and event.key == pygame.K_h:
+                idx = self.selected_class[2].value - 1
+                idx = (idx + 1) % 4 + 1
+                self.selected_class[2] = PlayerClass(idx)
+            if self.num_local_players >= 3 and event.key == pygame.K_TAB:
+                self.class_confirmed[2] = True
 
             # Check if all players confirmed
             if all(self.class_confirmed[:self.num_local_players]):
