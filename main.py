@@ -569,7 +569,7 @@ class Bullet:
 
 class Wall:
     """Buildable wall for Builder class."""
-    def __init__(self, x, y, width=320, height=80, health=400):
+    def __init__(self, x, y, width=320, height=80, health=1000):
         self.x = x
         self.y = y
         self.width = width
@@ -2393,7 +2393,7 @@ class NetworkManager:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.socket.bind(('', port))
-            self.socket.listen(4)
+            self.socket.listen(10)  # Support up to 10 players
             self.is_host = True
             self.is_connected = True
             self.port = port
@@ -2545,9 +2545,9 @@ class Game:
         self.font_medium = pygame.font.Font(None, 48)
         self.font_small = pygame.font.Font(None, 32)
 
-        # Class selection
-        self.selected_class = [PlayerClass.RANGER] * 4
-        self.class_confirmed = [False] * 4
+        # Class selection (support up to 10 players)
+        self.selected_class = [PlayerClass.RANGER] * 10
+        self.class_confirmed = [False] * 10
         self.changing_class_in_bunker = False  # Flag for in-game class change
 
         # Input for IP
