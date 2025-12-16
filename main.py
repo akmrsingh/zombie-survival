@@ -23,9 +23,333 @@ from enum import Enum
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple, Any
 
+# Detect touch/mobile/web early (needed for SoundManager)
+IS_MOBILE = False
+try:
+    # Check if running in browser (Pygbag)
+    import platform
+    if platform.system() == 'Emscripten':
+        IS_MOBILE = True
+except:
+    pass
+
 # Initialize Pygame
 pygame.init()
-pygame.mixer.init()
+if not IS_MOBILE:
+    try:
+        pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+    except:
+        pass
+
+# Try to import numpy for sound generation
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    NUMPY_AVAILABLE = False
+    import array
+
+class SoundManager:
+    """Manages all game sounds with procedurally generated effects."""
+    def __init__(self):
+        self.sounds = {}
+        self.enabled = True
+        self.volume = 0.5
+        self.music_volume = 0.3
+        self.music_playing = False
+        self.generate_sounds()
+
+    def generate_sounds(self):
+        """Generate all game sounds procedurally."""
+        # Disable sound generation on web (causes issues)
+        if not NUMPY_AVAILABLE or IS_MOBILE:
+            return
+
+        sample_rate = 22050
+
+        # Gunshot sounds - different for each weapon type
+        self.sounds['pistol'] = self._create_gunshot(sample_rate, 0.1, 800, 0.8)
+        self.sounds['rifle'] = self._create_gunshot(sample_rate, 0.08, 600, 1.0)
+        self.sounds['shotgun'] = self._create_gunshot(sample_rate, 0.15, 400, 1.2)
+        self.sounds['sniper'] = self._create_gunshot(sample_rate, 0.2, 300, 1.5)
+        self.sounds['smg'] = self._create_gunshot(sample_rate, 0.05, 1000, 0.6)
+        self.sounds['explosion'] = self._create_explosion(sample_rate, 0.4)
+
+        # Zombie sounds
+        self.sounds['zombie_hit'] = self._create_hit_sound(sample_rate, 0.1)
+        self.sounds['zombie_death'] = self._create_death_sound(sample_rate, 0.3)
+        self.sounds['zombie_growl'] = self._create_growl(sample_rate, 0.4)
+        self.sounds['screamer'] = self._create_scream(sample_rate, 0.5)
+
+        # Player sounds
+        self.sounds['player_hurt'] = self._create_hurt_sound(sample_rate, 0.15)
+        self.sounds['reload'] = self._create_reload_sound(sample_rate, 0.3)
+        self.sounds['heal'] = self._create_heal_sound(sample_rate, 0.3)
+        self.sounds['build'] = self._create_build_sound(sample_rate, 0.2)
+
+        # UI sounds
+        self.sounds['click'] = self._create_click(sample_rate, 0.05)
+        self.sounds['wave_start'] = self._create_wave_start(sample_rate, 0.5)
+
+    def _create_gunshot(self, rate, duration, freq, intensity):
+        """Create a gunshot sound."""
+        samples = int(rate * duration)
+        t = np.linspace(0, duration, samples, False)
+        # Noise burst with decay
+        noise = np.random.uniform(-1, 1, samples) * intensity
+        envelope = np.exp(-t * 30)  # Fast decay
+        # Add some low frequency punch
+        punch = np.sin(2 * np.pi * freq * t) * 0.3 * np.exp(-t * 50)
+        sound_data = ((noise * envelope + punch) * 32767 * self.volume).astype(np.int16)
+        stereo = np.column_stack((sound_data, sound_data))
+        return pygame.sndarray.make_sound(stereo)
+
+    def _create_explosion(self, rate, duration):
+        """Create an explosion sound."""
+        samples = int(rate * duration)
+        t = np.linspace(0, duration, samples, False)
+        noise = np.random.uniform(-1, 1, samples)
+        # Slower decay for explosion
+        envelope = np.exp(-t * 8)
+        # Low rumble
+        rumble = np.sin(2 * np.pi * 60 * t) * 0.5
+        sound_data = ((noise * envelope * 0.7 + rumble * envelope) * 32767 * self.volume).astype(np.int16)
+        stereo = np.column_stack((sound_data, sound_data))
+        return pygame.sndarray.make_sound(stereo)
+
+    def _create_hit_sound(self, rate, duration):
+        """Create a flesh hit sound."""
+        samples = int(rate * duration)
+        t = np.linspace(0, duration, samples, False)
+        noise = np.random.uniform(-1, 1, samples) * 0.5
+        thud = np.sin(2 * np.pi * 150 * t) * 0.5
+        envelope = np.exp(-t * 40)
+        sound_data = ((noise + thud) * envelope * 32767 * self.volume * 0.6).astype(np.int16)
+        stereo = np.column_stack((sound_data, sound_data))
+        return pygame.sndarray.make_sound(stereo)
+
+    def _create_death_sound(self, rate, duration):
+        """Create zombie death groan."""
+        samples = int(rate * duration)
+        t = np.linspace(0, duration, samples, False)
+        # Descending tone
+        freq = 200 - t * 300
+        wave = np.sin(2 * np.pi * freq * t) * 0.4
+        noise = np.random.uniform(-0.2, 0.2, samples)
+        envelope = np.exp(-t * 5)
+        sound_data = ((wave + noise) * envelope * 32767 * self.volume * 0.5).astype(np.int16)
+        stereo = np.column_stack((sound_data, sound_data))
+        return pygame.sndarray.make_sound(stereo)
+
+    def _create_growl(self, rate, duration):
+        """Create zombie growl."""
+        samples = int(rate * duration)
+        t = np.linspace(0, duration, samples, False)
+        freq = 80 + np.sin(t * 10) * 20
+        wave = np.sin(2 * np.pi * freq * t) * 0.3
+        noise = np.random.uniform(-0.3, 0.3, samples)
+        envelope = np.sin(np.pi * t / duration)
+        sound_data = ((wave + noise) * envelope * 32767 * self.volume * 0.4).astype(np.int16)
+        stereo = np.column_stack((sound_data, sound_data))
+        return pygame.sndarray.make_sound(stereo)
+
+    def _create_scream(self, rate, duration):
+        """Create screamer zombie scream."""
+        samples = int(rate * duration)
+        t = np.linspace(0, duration, samples, False)
+        # High pitched scream with vibrato
+        freq = 600 + np.sin(t * 40) * 100
+        wave = np.sin(2 * np.pi * freq * t) * 0.5
+        envelope = np.sin(np.pi * t / duration)
+        sound_data = (wave * envelope * 32767 * self.volume * 0.5).astype(np.int16)
+        stereo = np.column_stack((sound_data, sound_data))
+        return pygame.sndarray.make_sound(stereo)
+
+    def _create_hurt_sound(self, rate, duration):
+        """Create player hurt sound."""
+        samples = int(rate * duration)
+        t = np.linspace(0, duration, samples, False)
+        freq = 300 - t * 200
+        wave = np.sin(2 * np.pi * freq * t)
+        envelope = np.exp(-t * 15)
+        sound_data = (wave * envelope * 32767 * self.volume * 0.5).astype(np.int16)
+        stereo = np.column_stack((sound_data, sound_data))
+        return pygame.sndarray.make_sound(stereo)
+
+    def _create_reload_sound(self, rate, duration):
+        """Create reload click sound."""
+        samples = int(rate * duration)
+        t = np.linspace(0, duration, samples, False)
+        # Two clicks - magazine out, magazine in
+        click1 = np.zeros(samples)
+        click2 = np.zeros(samples)
+        click_samples = int(rate * 0.02)
+        if click_samples < samples // 3:
+            click1[:click_samples] = np.random.uniform(-1, 1, click_samples)
+        if click_samples + samples // 2 < samples:
+            click2[samples//2:samples//2 + click_samples] = np.random.uniform(-1, 1, click_samples)
+        sound_data = ((click1 + click2) * 32767 * self.volume * 0.4).astype(np.int16)
+        stereo = np.column_stack((sound_data, sound_data))
+        return pygame.sndarray.make_sound(stereo)
+
+    def _create_heal_sound(self, rate, duration):
+        """Create healing sound - rising tone."""
+        samples = int(rate * duration)
+        t = np.linspace(0, duration, samples, False)
+        freq = 400 + t * 400
+        wave = np.sin(2 * np.pi * freq * t) * 0.3
+        envelope = np.sin(np.pi * t / duration)
+        sound_data = (wave * envelope * 32767 * self.volume * 0.4).astype(np.int16)
+        stereo = np.column_stack((sound_data, sound_data))
+        return pygame.sndarray.make_sound(stereo)
+
+    def _create_build_sound(self, rate, duration):
+        """Create building/hammering sound."""
+        samples = int(rate * duration)
+        t = np.linspace(0, duration, samples, False)
+        noise = np.random.uniform(-1, 1, samples)
+        envelope = np.exp(-t * 20)
+        sound_data = (noise * envelope * 32767 * self.volume * 0.5).astype(np.int16)
+        stereo = np.column_stack((sound_data, sound_data))
+        return pygame.sndarray.make_sound(stereo)
+
+    def _create_click(self, rate, duration):
+        """Create UI click sound."""
+        samples = int(rate * duration)
+        t = np.linspace(0, duration, samples, False)
+        wave = np.sin(2 * np.pi * 1000 * t)
+        envelope = np.exp(-t * 100)
+        sound_data = (wave * envelope * 32767 * self.volume * 0.3).astype(np.int16)
+        stereo = np.column_stack((sound_data, sound_data))
+        return pygame.sndarray.make_sound(stereo)
+
+    def _create_wave_start(self, rate, duration):
+        """Create wave start horn sound."""
+        samples = int(rate * duration)
+        t = np.linspace(0, duration, samples, False)
+        wave = np.sin(2 * np.pi * 200 * t) * 0.4 + np.sin(2 * np.pi * 300 * t) * 0.3
+        envelope = np.sin(np.pi * t / duration)
+        sound_data = (wave * envelope * 32767 * self.volume * 0.5).astype(np.int16)
+        stereo = np.column_stack((sound_data, sound_data))
+        return pygame.sndarray.make_sound(stereo)
+
+    def play(self, sound_name):
+        """Play a sound effect."""
+        if IS_MOBILE or not self.enabled or not NUMPY_AVAILABLE:
+            return
+        try:
+            if sound_name in self.sounds:
+                self.sounds[sound_name].play()
+        except:
+            pass
+
+    def play_weapon(self, weapon_name):
+        """Play appropriate weapon sound based on weapon type."""
+        if IS_MOBILE or not self.enabled or not NUMPY_AVAILABLE:
+            return
+        # Map weapon names to sound categories
+        if 'pistol' in weapon_name.lower() or 'glock' in weapon_name.lower() or 'deagle' in weapon_name.lower():
+            self.play('pistol')
+        elif 'shotgun' in weapon_name.lower() or 'spas' in weapon_name.lower():
+            self.play('shotgun')
+        elif 'sniper' in weapon_name.lower() or 'svd' in weapon_name.lower():
+            self.play('sniper')
+        elif 'smg' in weapon_name.lower() or 'p90' in weapon_name.lower() or 'pdw' in weapon_name.lower():
+            self.play('smg')
+        elif 'rpg' in weapon_name.lower() or 'grenade' in weapon_name.lower():
+            self.play('explosion')
+        elif 'minigun' in weapon_name.lower():
+            self.play('smg')
+        else:
+            self.play('rifle')
+
+    def set_volume(self, volume):
+        """Set master volume (0.0 to 1.0)."""
+        self.volume = max(0.0, min(1.0, volume))
+        # Regenerate sounds with new volume
+        self.generate_sounds()
+
+    def toggle(self):
+        """Toggle sound on/off."""
+        self.enabled = not self.enabled
+        if not self.enabled:
+            self.stop_music()
+
+    def generate_music(self):
+        """Generate procedural background music."""
+        if not NUMPY_AVAILABLE:
+            return None
+
+        sample_rate = 22050
+        duration = 8.0  # 8 second loop
+        samples = int(sample_rate * duration)
+        t = np.linspace(0, duration, samples, False)
+
+        # Create ambient drone with multiple layers
+        # Base drone
+        drone = np.sin(2 * np.pi * 55 * t) * 0.15  # Low A
+        drone += np.sin(2 * np.pi * 82.5 * t) * 0.1  # Low E
+        drone += np.sin(2 * np.pi * 110 * t) * 0.08  # A
+
+        # Tension pulse (heartbeat-like)
+        pulse_freq = 1.2  # pulses per second
+        pulse = np.sin(2 * np.pi * pulse_freq * t) ** 8 * 0.15
+        tension = np.sin(2 * np.pi * 73.4 * t) * pulse  # D note pulsing
+
+        # Eerie high notes
+        high1 = np.sin(2 * np.pi * 440 * t + np.sin(t * 2) * 0.5) * 0.03
+        high2 = np.sin(2 * np.pi * 523.25 * t) * 0.02 * np.sin(t * 0.5) ** 2
+
+        # Combine layers
+        music = drone + tension + high1 + high2
+
+        # Add subtle noise for atmosphere
+        noise = np.random.uniform(-0.02, 0.02, samples)
+        music += noise
+
+        # Smooth fade for seamless looping
+        fade_samples = int(sample_rate * 0.1)
+        fade_in = np.linspace(0, 1, fade_samples)
+        fade_out = np.linspace(1, 0, fade_samples)
+        music[:fade_samples] *= fade_in
+        music[-fade_samples:] *= fade_out
+
+        # Convert to sound
+        sound_data = (music * 32767 * self.music_volume).astype(np.int16)
+        stereo = np.column_stack((sound_data, sound_data))
+        return pygame.sndarray.make_sound(stereo)
+
+    def start_music(self):
+        """Start playing background music."""
+        # Skip music on web - mixer channels don't work properly
+        if IS_MOBILE or not NUMPY_AVAILABLE or self.music_playing:
+            return
+
+        try:
+            music = self.generate_music()
+            if music:
+                self.music_sound = music
+                self.music_channel = pygame.mixer.Channel(7)  # Use channel 7 for music
+                self.music_channel.play(music, loops=-1)  # Loop forever
+                self.music_playing = True
+        except:
+            pass  # Silently fail if mixer isn't working
+
+    def stop_music(self):
+        """Stop background music."""
+        if hasattr(self, 'music_channel') and self.music_channel:
+            self.music_channel.stop()
+        self.music_playing = False
+
+    def set_music_volume(self, volume):
+        """Set music volume (0.0 to 1.0)."""
+        self.music_volume = max(0.0, min(1.0, volume))
+        if hasattr(self, 'music_channel') and self.music_channel:
+            self.music_channel.set_volume(self.music_volume)
+
+
+# Global sound manager
+sound_manager = SoundManager()
 
 # Constants
 SCREEN_WIDTH = 1400
@@ -49,18 +373,249 @@ LIGHT_BLUE = (135, 206, 235)
 DARK_RED = (139, 0, 0)
 ZOMBIE_GREEN = (50, 120, 50)
 
-# Detect touch/mobile
-IS_MOBILE = False
-try:
-    # Check if running in browser (Pygbag)
-    import platform
-    if platform.system() == 'Emscripten':
-        IS_MOBILE = True
-except:
-    pass
+# Firebase configuration
+FIREBASE_URL = "https://zombie-survival-1da6c-default-rtdb.firebaseio.com"
+
+# Account Manager for saving/loading player data
+class AccountManager:
+    """Manages user accounts with Firebase database."""
+    def __init__(self):
+        self.save_dir = "saves"
+        self.current_user = None
+        self.is_guest = False
+        self.user_data = {"coins": 0, "weapons": ["pistol"], "high_score": 0}
+        self.is_web = IS_MOBILE
+        self.use_firebase = True  # Use Firebase for cloud saves
+        self.firebase_url = FIREBASE_URL
+        if not self.is_web:
+            self._ensure_save_dir()
+
+    def _ensure_save_dir(self):
+        """Create saves directory if it doesn't exist."""
+        try:
+            import os
+            if not os.path.exists(self.save_dir):
+                os.makedirs(self.save_dir)
+        except:
+            pass
+
+    def _get_save_path(self, username):
+        """Get save file path for user."""
+        return f"{self.save_dir}/{username}.sav"
+
+    def _firebase_get(self, path):
+        """GET request to Firebase."""
+        # Disable Firebase on web (urllib doesn't work in browser)
+        if self.is_web:
+            return None
+        try:
+            import urllib.request
+            import json
+            url = f"{self.firebase_url}/{path}.json"
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=3) as response:
+                return json.loads(response.read().decode())
+        except:
+            return None
+
+    def _firebase_put(self, path, data):
+        """PUT request to Firebase."""
+        # Disable Firebase on web (urllib doesn't work in browser)
+        if self.is_web:
+            return False
+        try:
+            import urllib.request
+            import json
+            url = f"{self.firebase_url}/{path}.json"
+            json_data = json.dumps(data).encode('utf-8')
+            req = urllib.request.Request(url, data=json_data, method='PUT')
+            req.add_header('Content-Type', 'application/json')
+            with urllib.request.urlopen(req, timeout=3) as response:
+                return True
+        except:
+            return False
+
+    def _hash_password(self, password):
+        """Simple hash for password (not secure, but works everywhere)."""
+        import hashlib
+        return hashlib.sha256(password.encode()).hexdigest()
+
+    def register(self, username, password):
+        """Register a new account. Returns (success, message)."""
+        if len(username) < 3:
+            return False, "Username must be at least 3 characters"
+        if len(password) < 3:
+            return False, "Password must be at least 3 characters"
+
+        # Sanitize username for Firebase path
+        safe_username = username.lower().replace(".", "_").replace("#", "_").replace("$", "_").replace("[", "_").replace("]", "_")
+
+        # Try Firebase first
+        if self.use_firebase:
+            existing = self._firebase_get(f"users/{safe_username}")
+            if existing:
+                return False, "Username already exists"
+
+            data = {
+                "password": self._hash_password(password),
+                "coins": 0,
+                "weapons": ["pistol"],
+                "high_score": 0
+            }
+            if self._firebase_put(f"users/{safe_username}", data):
+                self.current_user = username
+                self.is_guest = False
+                self.user_data = {"coins": 0, "weapons": ["pistol"], "high_score": 0}
+                return True, "Account created! Progress will be saved."
+
+        # Fallback to local if not web
+        if not self.is_web:
+            save_path = self._get_save_path(username)
+            try:
+                import os
+                import json
+                if os.path.exists(save_path):
+                    return False, "Username already exists"
+                data = {
+                    "password": self._hash_password(password),
+                    "coins": 0,
+                    "weapons": ["pistol"],
+                    "high_score": 0
+                }
+                with open(save_path, 'w') as f:
+                    json.dump(data, f)
+                self.current_user = username
+                self.is_guest = False
+                self.user_data = {"coins": 0, "weapons": ["pistol"], "high_score": 0}
+                return True, "Account created (local)!"
+            except Exception as e:
+                return False, f"Error: {str(e)}"
+
+        # Web without Firebase working
+        self.current_user = username
+        self.is_guest = False
+        self.user_data = {"coins": 0, "weapons": ["pistol"], "high_score": 0}
+        return True, f"Welcome {username}! (Offline mode)"
+
+    def login(self, username, password):
+        """Login to existing account. Returns (success, message)."""
+        if len(username) < 3:
+            return False, "Username must be at least 3 characters"
+        if len(password) < 3:
+            return False, "Password must be at least 3 characters"
+
+        safe_username = username.lower().replace(".", "_").replace("#", "_").replace("$", "_").replace("[", "_").replace("]", "_")
+
+        # Try Firebase first
+        if self.use_firebase:
+            data = self._firebase_get(f"users/{safe_username}")
+            if data:
+                if data.get("password") == self._hash_password(password):
+                    self.current_user = username
+                    self.is_guest = False
+                    self.user_data = {
+                        "coins": data.get("coins", 0),
+                        "weapons": data.get("weapons", ["pistol"]),
+                        "high_score": data.get("high_score", 0)
+                    }
+                    return True, f"Welcome back, {username}!"
+                else:
+                    return False, "Wrong password"
+
+        # Fallback to local
+        if not self.is_web:
+            save_path = self._get_save_path(username)
+            try:
+                import os
+                import json
+                if not os.path.exists(save_path):
+                    return False, "Account not found"
+                with open(save_path, 'r') as f:
+                    data = json.load(f)
+                if data.get("password") == self._hash_password(password):
+                    self.current_user = username
+                    self.is_guest = False
+                    self.user_data = {
+                        "coins": data.get("coins", 0),
+                        "weapons": data.get("weapons", ["pistol"]),
+                        "high_score": data.get("high_score", 0)
+                    }
+                    return True, f"Welcome back, {username}!"
+                return False, "Wrong password"
+            except:
+                return False, "Account not found"
+
+        return False, "Account not found"
+
+    def guest_login(self):
+        """Login as guest (no save)."""
+        self.current_user = "Guest"
+        self.is_guest = True
+        self.user_data = {"coins": 0, "weapons": ["pistol"], "high_score": 0}
+        return True, "Playing as Guest (progress won't be saved)"
+
+    def save(self):
+        """Save current user data."""
+        if self.is_guest or not self.current_user:
+            return False
+
+        safe_username = self.current_user.lower().replace(".", "_").replace("#", "_").replace("$", "_").replace("[", "_").replace("]", "_")
+
+        # Try Firebase first
+        if self.use_firebase:
+            # Get existing data to preserve password
+            existing = self._firebase_get(f"users/{safe_username}")
+            if existing:
+                existing["coins"] = self.user_data.get("coins", 0)
+                existing["weapons"] = self.user_data.get("weapons", ["pistol"])
+                existing["high_score"] = self.user_data.get("high_score", 0)
+                if self._firebase_put(f"users/{safe_username}", existing):
+                    return True
+
+        # Fallback to local
+        if not self.is_web:
+            save_path = self._get_save_path(self.current_user)
+            try:
+                import json
+                import os
+                data = {}
+                if os.path.exists(save_path):
+                    with open(save_path, 'r') as f:
+                        data = json.load(f)
+                data["coins"] = self.user_data.get("coins", 0)
+                data["weapons"] = self.user_data.get("weapons", ["pistol"])
+                data["high_score"] = self.user_data.get("high_score", 0)
+                with open(save_path, 'w') as f:
+                    json.dump(data, f)
+                return True
+            except:
+                pass
+        return False
+
+    def add_coins(self, amount):
+        """Add coins to current user."""
+        self.user_data["coins"] = self.user_data.get("coins", 0) + amount
+        self.save()
+
+    def unlock_weapon(self, weapon_name):
+        """Unlock a weapon for current user."""
+        if weapon_name not in self.user_data.get("weapons", []):
+            self.user_data["weapons"].append(weapon_name)
+            self.save()
+
+    def update_high_score(self, score):
+        """Update high score if new score is higher."""
+        if score > self.user_data.get("high_score", 0):
+            self.user_data["high_score"] = score
+            self.save()
+
+
+# Global account manager
+account_manager = AccountManager()
 
 # Game States
 class GameState(Enum):
+    ACCOUNT = 0  # Login/Register/Guest screen
     MENU = 1
     CLASS_SELECT = 2
     PLAYING = 3
@@ -70,6 +625,8 @@ class GameState(Enum):
     MULTIPLAYER_LOBBY = 7
     HOST_GAME = 8
     JOIN_GAME = 9
+    REGISTER = 10  # Registration screen
+    LOGIN = 11  # Login screen
 
 # Player Classes
 class PlayerClass(Enum):
@@ -102,6 +659,7 @@ class WeaponStats:
     recoil: float = 1.0  # recoil intensity (affects accuracy after shots)
     penetration: int = 1  # how many enemies bullet can hit
     caliber: str = "9mm"  # bullet type for display
+    special: str = ""  # special effect: "burn", "freeze", "chain"
 
 # Realistic weapon definitions based on real firearms
 WEAPONS = {
@@ -379,7 +937,164 @@ WEAPONS = {
         caliber="Melee",
         range=50  # Very short range
     ),
+
+    # === SPECIAL/EXOTIC WEAPONS ===
+    # Flamethrower - continuous fire damage
+    "flamethrower": WeaponStats(
+        name="Flamethrower",
+        damage=8,  # Low damage per tick but continuous
+        fire_rate=30.0,  # Very fast continuous stream
+        reload_time=4.0,
+        mag_size=100,  # Fuel tank
+        max_ammo=300,
+        bullet_speed=12,  # Slow flame projectiles
+        spread=15,  # Wide spread
+        recoil=0.5,
+        caliber="Fire",
+        range=200,  # Short range
+        special="burn"  # Causes burn damage over time
+    ),
+
+    # Laser Gun - energy beam weapon
+    "laser_gun": WeaponStats(
+        name="Laser Gun",
+        damage=45,
+        fire_rate=4.0,
+        reload_time=3.0,  # Recharge time
+        mag_size=20,  # Energy cells
+        max_ammo=80,
+        bullet_speed=100,  # Instant hit basically
+        spread=0.5,  # Very accurate
+        recoil=0.3,
+        penetration=5,  # Goes through many enemies
+        caliber="Energy",
+        range=1000
+    ),
+
+    # Crossbow - silent, high damage
+    "crossbow": WeaponStats(
+        name="Crossbow",
+        damage=120,  # High damage per bolt
+        fire_rate=0.8,  # Slow reload between shots
+        reload_time=2.5,
+        mag_size=1,  # Single bolt
+        max_ammo=30,
+        bullet_speed=35,
+        spread=1.0,
+        recoil=1.5,
+        penetration=2,
+        caliber="Bolt",
+        range=600
+    ),
+
+    # Electric Gun - chain lightning to nearby enemies
+    "electric_gun": WeaponStats(
+        name="Electric Gun",
+        damage=35,
+        fire_rate=2.0,
+        reload_time=3.5,
+        mag_size=15,
+        max_ammo=60,
+        bullet_speed=50,
+        spread=2.0,
+        recoil=1.0,
+        caliber="Electric",
+        range=400,
+        special="chain"  # Chains to nearby enemies
+    ),
+
+    # Freeze Ray - slows enemies down
+    "freeze_ray": WeaponStats(
+        name="Freeze Ray",
+        damage=15,  # Low damage
+        fire_rate=8.0,
+        reload_time=3.0,
+        mag_size=40,
+        max_ammo=120,
+        bullet_speed=25,
+        spread=8.0,
+        recoil=0.2,
+        caliber="Cryo",
+        range=350,
+        special="freeze"  # Slows enemies
+    ),
+
+    # Dual Pistols - two handguns at once
+    "dual_pistols": WeaponStats(
+        name="Dual Pistols",
+        damage=22,
+        fire_rate=8.0,  # Fast alternating fire
+        reload_time=2.8,  # Slower reload (two guns)
+        mag_size=34,  # 17 each
+        max_ammo=170,
+        bullet_speed=28,
+        spread=4.0,  # Less accurate dual wielding
+        recoil=2.0,
+        caliber="Standard",
+        range=450
+    ),
+
+    # Throwing Knives - ranged melee
+    "throwing_knives": WeaponStats(
+        name="Throwing Knives",
+        damage=65,
+        fire_rate=3.0,
+        reload_time=1.5,  # Pull out more knives
+        mag_size=6,
+        max_ammo=30,
+        bullet_speed=22,
+        spread=2.0,
+        recoil=0.5,
+        caliber="Blade",
+        range=400
+    ),
 }
+
+# Weapon rarity weights (higher = more common)
+# Order from common to rare: Throwing Knives, Freeze Ray, Crossbow, Dual Pistols, Flamethrower, Electric Gun, Laser Gun
+WEAPON_RARITY = {
+    # Common weapons (weight 100)
+    "pistol": 100,
+    "glock": 100,
+    "knife": 80,
+    "throwing_knives": 70,  # Most common exotic
+
+    # Uncommon (weight 50-60)
+    "smg": 60,
+    "shotgun": 55,
+    "freeze_ray": 50,  # Common exotic
+
+    # Rare (weight 30-40)
+    "rifle": 40,
+    "crossbow": 35,  # Uncommon exotic
+    "ak47": 35,
+    "dual_pistols": 30,  # Uncommon exotic
+    "spas12": 30,
+
+    # Very Rare (weight 15-25)
+    "p90": 25,
+    "flamethrower": 20,  # Rare exotic
+    "svd": 20,
+    "deagle": 18,
+    "electric_gun": 15,  # Rare exotic
+
+    # Legendary (weight 5-10)
+    "sniper": 10,
+    "laser_gun": 8,  # Rarest exotic
+    "rpg": 7,
+    "grenade_launcher": 6,
+    "minigun": 5,
+
+    # Special (very rare)
+    "nail_gun": 15,
+    "tranq_pistol": 20,
+}
+
+def get_random_weapon():
+    """Get a random weapon based on rarity weights."""
+    weapons = list(WEAPON_RARITY.keys())
+    weights = list(WEAPON_RARITY.values())
+    return random.choices(weapons, weights=weights, k=1)[0]
 
 
 class VirtualJoystick:
@@ -473,6 +1188,127 @@ class TouchButton:
         pygame.draw.circle(screen, WHITE, (int(self.x), int(self.y)), self.radius, 3)
         text = font.render(self.label, True, BLACK if self.pressed else WHITE)
         screen.blit(text, (self.x - text.get_width()//2, self.y - text.get_height()//2))
+
+
+class VirtualKeyboard:
+    """On-screen keyboard for mobile text input."""
+    def __init__(self):
+        self.visible = False
+        self.shift = False
+        self.keys_lower = [
+            ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
+            ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
+            ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', '_'],
+            ['SHIFT', 'z', 'x', 'c', 'v', 'b', 'n', 'm', 'DEL'],
+            ['SPACE', 'DONE']
+        ]
+        self.keys_upper = [
+            ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')'],
+            ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+            ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', '-'],
+            ['SHIFT', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', 'DEL'],
+            ['SPACE', 'DONE']
+        ]
+        self.key_width = 50
+        self.key_height = 45
+        self.padding = 5
+        self.start_y = SCREEN_HEIGHT - 280
+        self.pressed_key = None
+
+    def show(self):
+        self.visible = True
+
+    def hide(self):
+        self.visible = False
+
+    def get_keys(self):
+        return self.keys_upper if self.shift else self.keys_lower
+
+    def handle_click(self, x, y):
+        """Handle mouse/touch click, returns the key pressed or None."""
+        if not self.visible:
+            return None
+
+        keys = self.get_keys()
+        for row_idx, row in enumerate(keys):
+            row_width = len(row) * (self.key_width + self.padding)
+            start_x = (SCREEN_WIDTH - row_width) // 2
+            key_y = self.start_y + row_idx * (self.key_height + self.padding)
+
+            for col_idx, key in enumerate(row):
+                # Special keys are wider
+                if key in ['SHIFT', 'DEL', 'SPACE', 'DONE']:
+                    kw = self.key_width * 2 if key == 'SPACE' else self.key_width * 1.5
+                else:
+                    kw = self.key_width
+
+                key_x = start_x + col_idx * (self.key_width + self.padding)
+
+                if key_x <= x <= key_x + kw and key_y <= y <= key_y + self.key_height:
+                    self.pressed_key = key
+                    if key == 'SHIFT':
+                        self.shift = not self.shift
+                        return None
+                    elif key == 'DONE':
+                        self.hide()
+                        return 'DONE'
+                    elif key == 'DEL':
+                        return 'BACKSPACE'
+                    elif key == 'SPACE':
+                        return ' '
+                    else:
+                        return key
+        return None
+
+    def draw(self, screen, font):
+        if not self.visible:
+            return
+
+        # Draw keyboard background
+        kb_height = 5 * (self.key_height + self.padding) + 20
+        pygame.draw.rect(screen, (40, 40, 40), (0, self.start_y - 10, SCREEN_WIDTH, kb_height))
+
+        keys = self.get_keys()
+        for row_idx, row in enumerate(keys):
+            row_width = len(row) * (self.key_width + self.padding)
+            start_x = (SCREEN_WIDTH - row_width) // 2
+            key_y = self.start_y + row_idx * (self.key_height + self.padding)
+
+            for col_idx, key in enumerate(row):
+                # Special keys are wider
+                if key in ['SHIFT', 'DEL', 'SPACE', 'DONE']:
+                    kw = self.key_width * 2 if key == 'SPACE' else int(self.key_width * 1.5)
+                else:
+                    kw = self.key_width
+
+                key_x = start_x + col_idx * (self.key_width + self.padding)
+
+                # Key colors
+                if key == self.pressed_key:
+                    color = WHITE
+                    text_color = BLACK
+                elif key == 'SHIFT' and self.shift:
+                    color = YELLOW
+                    text_color = BLACK
+                elif key in ['SHIFT', 'DEL', 'DONE']:
+                    color = (80, 80, 80)
+                    text_color = WHITE
+                elif key == 'SPACE':
+                    color = (60, 60, 60)
+                    text_color = WHITE
+                else:
+                    color = (70, 70, 70)
+                    text_color = WHITE
+
+                pygame.draw.rect(screen, color, (key_x, key_y, kw, self.key_height), border_radius=5)
+                pygame.draw.rect(screen, (100, 100, 100), (key_x, key_y, kw, self.key_height), 2, border_radius=5)
+
+                # Draw key label
+                label = key if len(key) == 1 else key[:3]
+                text = font.render(label, True, text_color)
+                screen.blit(text, (key_x + kw//2 - text.get_width()//2, key_y + self.key_height//2 - text.get_height()//2))
+
+        self.pressed_key = None
 
 
 class Particle:
@@ -628,6 +1464,144 @@ class HealZone:
         screen.blit(surface, (self.x - self.radius - camera_offset[0], self.y - self.radius - camera_offset[1]))
 
 
+class Pickup:
+    """Collectible items: health, ammo, coins, weapons."""
+    def __init__(self, x, y, pickup_type="health"):
+        self.x = x
+        self.y = y
+        self.pickup_type = pickup_type
+        self.active = True
+        self.size = 20
+        self.bob_offset = random.uniform(0, math.pi * 2)  # For floating animation
+        self.rotation = 0
+        self.spawn_time = 0
+        self.lifetime = 30  # Despawn after 30 seconds
+
+        # Type-specific properties
+        if pickup_type == "health":
+            self.color = (255, 100, 100)  # Red
+            self.value = 25  # Health restored
+            self.size = 18
+        elif pickup_type == "ammo":
+            self.color = (255, 200, 50)  # Yellow/gold
+            self.value = 30  # Ammo restored (percentage)
+            self.size = 16
+        elif pickup_type == "coin":
+            self.color = (255, 215, 0)  # Gold
+            self.value = 10  # Coins
+            self.size = 14
+        elif pickup_type == "big_coin":
+            self.color = (255, 215, 0)  # Gold
+            self.value = 50  # Big coin value
+            self.size = 20
+        elif pickup_type == "weapon":
+            self.color = (150, 150, 150)  # Silver/gray
+            self.value = 0  # Random weapon
+            self.size = 22
+            self.weapon_key = get_random_weapon()  # Use rarity-weighted selection
+
+    def update(self, dt):
+        self.spawn_time += dt
+        self.rotation += dt * 90  # Rotate
+        if self.spawn_time > self.lifetime:
+            self.active = False
+        return self.active
+
+    def collect(self, player):
+        """Apply pickup effect to player. Returns True if collected."""
+        if self.pickup_type == "health":
+            if player.health < player.max_health:
+                player.health = min(player.health + self.value, player.max_health)
+                sound_manager.play('heal')
+                return True
+            return False  # Don't collect if full health
+
+        elif self.pickup_type == "ammo":
+            # Refill current weapon ammo
+            max_ammo = player.current_weapon.max_ammo
+            if player.reserve_ammo < max_ammo:
+                player.reserve_ammo = min(player.reserve_ammo + int(max_ammo * self.value / 100), max_ammo)
+                sound_manager.play('reload')
+                return True
+            return False
+
+        elif self.pickup_type == "coin" or self.pickup_type == "big_coin":
+            player.coins = getattr(player, 'coins', 0) + self.value
+            # Also add to account manager for persistent save
+            account_manager.add_coins(self.value)
+            sound_manager.play('click')
+            return True
+
+        elif self.pickup_type == "weapon":
+            # Give player a new weapon (add to inventory or swap)
+            if self.weapon_key in WEAPONS:
+                new_weapon = WEAPONS[self.weapon_key]
+                # Check if player already has this weapon
+                has_weapon = any(w.name == new_weapon.name for w in player.weapons)
+                if not has_weapon and len(player.weapons) < 5:
+                    player.weapons.append(new_weapon)
+                    # Save unlocked weapon to account
+                    account_manager.unlock_weapon(self.weapon_key)
+                    sound_manager.play('reload')
+                    return True
+                elif has_weapon:
+                    # Refill ammo instead
+                    player.reserve_ammo = player.current_weapon.max_ammo
+                    sound_manager.play('reload')
+                    return True
+            return False
+
+        return False
+
+    def draw(self, screen, camera_offset):
+        # Floating bob animation
+        bob = math.sin(self.spawn_time * 3 + self.bob_offset) * 5
+        draw_x = int(self.x - camera_offset[0])
+        draw_y = int(self.y - camera_offset[1] + bob)
+
+        # Don't draw if off screen
+        if draw_x < -50 or draw_x > SCREEN_WIDTH + 50 or draw_y < -50 or draw_y > SCREEN_HEIGHT + 50:
+            return
+
+        # Glow effect
+        glow_size = self.size + 8 + int(math.sin(self.spawn_time * 4) * 3)
+        glow_color = tuple(max(0, c - 100) for c in self.color)
+        pygame.draw.circle(screen, glow_color, (draw_x, draw_y), glow_size)
+
+        if self.pickup_type == "health":
+            # Health pack - red cross
+            pygame.draw.circle(screen, self.color, (draw_x, draw_y), self.size)
+            pygame.draw.circle(screen, WHITE, (draw_x, draw_y), self.size, 2)
+            # White cross
+            pygame.draw.rect(screen, WHITE, (draw_x - 8, draw_y - 3, 16, 6))
+            pygame.draw.rect(screen, WHITE, (draw_x - 3, draw_y - 8, 6, 16))
+
+        elif self.pickup_type == "ammo":
+            # Ammo box - yellow rectangle
+            pygame.draw.rect(screen, self.color, (draw_x - self.size//2, draw_y - self.size//2, self.size, self.size))
+            pygame.draw.rect(screen, (200, 150, 0), (draw_x - self.size//2, draw_y - self.size//2, self.size, self.size), 2)
+            # Bullet symbol
+            pygame.draw.ellipse(screen, (180, 140, 40), (draw_x - 4, draw_y - 7, 8, 14))
+
+        elif self.pickup_type == "coin" or self.pickup_type == "big_coin":
+            # Coin - spinning circle
+            size = self.size if self.pickup_type == "big_coin" else self.size
+            pygame.draw.circle(screen, self.color, (draw_x, draw_y), size)
+            pygame.draw.circle(screen, (200, 170, 0), (draw_x, draw_y), size, 2)
+            # $ symbol
+            font = pygame.font.Font(None, size + 8)
+            text = font.render("$", True, (150, 120, 0))
+            screen.blit(text, (draw_x - text.get_width()//2, draw_y - text.get_height()//2))
+
+        elif self.pickup_type == "weapon":
+            # Weapon crate
+            pygame.draw.rect(screen, self.color, (draw_x - self.size//2, draw_y - self.size//2, self.size, self.size))
+            pygame.draw.rect(screen, (100, 100, 100), (draw_x - self.size//2, draw_y - self.size//2, self.size, self.size), 2)
+            # Gun symbol
+            pygame.draw.rect(screen, (80, 80, 80), (draw_x - 8, draw_y - 2, 16, 4))
+            pygame.draw.rect(screen, (80, 80, 80), (draw_x + 2, draw_y - 2, 4, 8))
+
+
 class Zombie:
     """Enemy zombie with different types."""
     def __init__(self, x, y, zombie_type="normal", wave=1, king_stage=1):
@@ -765,6 +1739,74 @@ class Zombie:
             self.detail_color = vary_color((40, 20, 50), 8)
             self.wound_color = (120, 40, 120)  # Purple blood
             self.crown_color = (200, 170, 50)  # Golden crown
+        elif zombie_type == "screamer":
+            # Screamer - alerts and buffs nearby zombies when it sees a player
+            self.health = 45 + wave * 8
+            self.speed = 90 + wave * 2
+            self.damage = 8 + wave
+            self.size = 19
+            self.scream_cooldown = 0
+            self.scream_radius = 250  # Radius to alert other zombies
+            self.has_screamed = False  # Track if alerted this encounter
+            # Pale white/gray - throat is red/exposed
+            base_colors = [(180, 175, 170), (170, 165, 160), (190, 185, 180)]
+            self.skin_color = vary_color(random.choice(base_colors), 10)
+            self.detail_color = vary_color((140, 135, 130), 8)
+            self.wound_color = (200, 80, 80)  # Red throat
+            self.mouth_color = (180, 50, 50)  # Open screaming mouth
+        elif zombie_type == "leaper":
+            # Leaper - jumps at players from distance
+            self.health = 40 + wave * 7
+            self.speed = 70 + wave * 2  # Slower walk, but jumps
+            self.damage = 20 + wave * 2  # High pounce damage
+            self.size = 17
+            self.leap_cooldown = 0
+            self.leap_range = 200  # Distance to start leap
+            self.leap_speed = 400  # Speed during leap
+            self.is_leaping = False
+            self.leap_target_x = 0
+            self.leap_target_y = 0
+            # Feral, hunched look - darker colors
+            base_colors = [(70, 75, 65), (65, 70, 60), (75, 80, 70)]
+            self.skin_color = vary_color(random.choice(base_colors), 12)
+            self.detail_color = vary_color((50, 55, 45), 10)
+            self.wound_color = (130, 55, 55)
+        elif zombie_type == "necromancer":
+            # Necromancer - resurrects dead zombies, stays back
+            self.health = 70 + wave * 10
+            self.speed = 40 + wave  # Slow, stays back
+            self.damage = 12 + wave
+            self.size = 26
+            self.resurrect_cooldown = 0
+            self.resurrect_radius = 200
+            self.max_resurrects = 3  # Max zombies to resurrect per cooldown
+            self.resurrect_count = 0
+            # Dark robed appearance - purple/black
+            base_colors = [(50, 40, 60), (45, 35, 55), (55, 45, 65)]
+            self.skin_color = vary_color(random.choice(base_colors), 8)
+            self.detail_color = vary_color((35, 25, 45), 6)
+            self.wound_color = (100, 50, 120)  # Purple energy
+            self.robe_color = (30, 20, 40)  # Dark robe
+            self.energy_color = (150, 80, 200)  # Purple magic
+            self.energy_pulse = 0
+        elif zombie_type == "horde_mother":
+            # HORDE MOTHER - Boss that spawns mini zombies
+            self.health = 800 + wave * 80
+            self.speed = 35 + wave
+            self.damage = 40 + wave * 2
+            self.size = 55
+            self.is_boss = True
+            self.spawn_cooldown = 0
+            self.spawn_rate = 3.0  # Spawn every 3 seconds
+            self.max_children = 8  # Max active children at once
+            self.children = []  # Track spawned children
+            self.belly_pulse = 0  # Animation for spawning
+            # Bloated, maternal horror
+            base_colors = [(80, 70, 75), (75, 65, 70), (85, 75, 80)]
+            self.skin_color = vary_color(random.choice(base_colors), 10)
+            self.detail_color = vary_color((55, 45, 50), 8)
+            self.wound_color = (140, 60, 70)
+            self.belly_color = (100, 85, 90)  # Distended belly
         else:
             # Default fallback
             self.health = 50 + wave * 10
@@ -833,6 +1875,92 @@ class Zombie:
                     if zombie != self and zombie.active:
                         zombie.target_bunker = True
                 self.roar_cooldown = 8.0  # Roar every 8 seconds
+
+        # Screamer - alert and speed up nearby zombies
+        if self.zombie_type == "screamer" and all_zombies:
+            self.scream_cooldown -= dt
+            # Check if player is close enough to trigger scream
+            for player in players:
+                if player.health > 0 and not getattr(player, 'is_traitor', False):
+                    dist = math.sqrt((player.x - self.x)**2 + (player.y - self.y)**2)
+                    if dist < 300 and self.scream_cooldown <= 0:
+                        # Scream! Buff all nearby zombies
+                        for zombie in all_zombies:
+                            if zombie != self and zombie.active:
+                                z_dist = math.sqrt((zombie.x - self.x)**2 + (zombie.y - self.y)**2)
+                                if z_dist < self.scream_radius:
+                                    # Temporary speed boost
+                                    zombie.speed *= 1.3
+                                    zombie.target_bunker = False  # Redirect to players
+                        self.scream_cooldown = 8.0  # Cooldown before next scream
+                        self.has_screamed = True
+                        sound_manager.play('screamer')
+                        break
+
+        # Leaper - jump at players
+        if self.zombie_type == "leaper":
+            if self.is_leaping:
+                # Currently in mid-leap
+                dx = self.leap_target_x - self.x
+                dy = self.leap_target_y - self.y
+                dist = math.sqrt(dx**2 + dy**2)
+                if dist < 20:
+                    # Landed
+                    self.is_leaping = False
+                    self.leap_cooldown = 2.5
+                else:
+                    # Continue leap
+                    self.x += (dx / dist) * self.leap_speed * dt
+                    self.y += (dy / dist) * self.leap_speed * dt
+            else:
+                self.leap_cooldown -= dt
+                # Check for leap opportunity
+                for player in players:
+                    if player.health > 0 and not getattr(player, 'is_traitor', False):
+                        dist = math.sqrt((player.x - self.x)**2 + (player.y - self.y)**2)
+                        if dist < self.leap_range and dist > 60 and self.leap_cooldown <= 0:
+                            # Start leap
+                            self.is_leaping = True
+                            self.leap_target_x = player.x
+                            self.leap_target_y = player.y
+                            break
+
+        # Necromancer - resurrect dead zombies (spawns new ones nearby)
+        if self.zombie_type == "necromancer" and all_zombies is not None:
+            self.energy_pulse = (self.energy_pulse + dt * 2) % (math.pi * 2)
+            self.resurrect_cooldown -= dt
+            if self.resurrect_cooldown <= 0:
+                # Spawn a "resurrected" zombie nearby
+                if len(all_zombies) < 50:  # Limit total zombies
+                    angle = random.uniform(0, math.pi * 2)
+                    spawn_dist = random.uniform(50, 100)
+                    new_x = self.x + math.cos(angle) * spawn_dist
+                    new_y = self.y + math.sin(angle) * spawn_dist
+                    # Resurrect as a weaker zombie
+                    new_zombie = Zombie(new_x, new_y, "normal", max(1, self.wave - 2))
+                    new_zombie.health = new_zombie.max_health * 0.5  # Half health
+                    all_zombies.append(new_zombie)
+                    self.resurrect_count += 1
+                self.resurrect_cooldown = 5.0  # Resurrect every 5 seconds
+
+        # Horde Mother - spawn mini zombies
+        if self.zombie_type == "horde_mother" and all_zombies is not None:
+            self.belly_pulse = (self.belly_pulse + dt * 3) % (math.pi * 2)
+            self.spawn_cooldown -= dt
+            # Clean up dead children
+            self.children = [c for c in self.children if c.active]
+            if self.spawn_cooldown <= 0 and len(self.children) < self.max_children:
+                # Spawn a mini zombie
+                angle = random.uniform(0, math.pi * 2)
+                spawn_x = self.x + math.cos(angle) * 40
+                spawn_y = self.y + math.sin(angle) * 40
+                child = Zombie(spawn_x, spawn_y, "crawler", self.wave)
+                child.health = child.max_health * 0.6
+                child.size = int(child.size * 0.7)
+                child.damage = int(child.damage * 0.7)
+                self.children.append(child)
+                all_zombies.append(child)
+                self.spawn_cooldown = self.spawn_rate
 
         # Find nearest target (player, wall, or bunker)
         nearest_dist = float('inf')
@@ -1006,6 +2134,79 @@ class Zombie:
                 (draw_x + 15, draw_y - self.size - 5)
             ])
 
+        elif self.zombie_type == "screamer":
+            # Wide open mouth
+            mouth_x = draw_x + int(math.cos(self.angle) * self.size * 0.4)
+            mouth_y = draw_y + int(math.sin(self.angle) * self.size * 0.4)
+            pygame.draw.circle(screen, self.mouth_color, (mouth_x, mouth_y), 8)
+            pygame.draw.circle(screen, (50, 20, 20), (mouth_x, mouth_y), 5)
+            # Sound wave effect when screaming
+            if getattr(self, 'has_screamed', False) and self.scream_cooldown > 6:
+                for i in range(3):
+                    wave_radius = 20 + i * 15
+                    wave_alpha = max(0, 255 - i * 60)
+                    pygame.draw.circle(screen, (255, 200, 200), (draw_x, draw_y), wave_radius, 2)
+
+        elif self.zombie_type == "leaper":
+            # Crouched pose with long arms
+            if getattr(self, 'is_leaping', False):
+                # Stretched out during leap
+                leap_angle = math.atan2(self.leap_target_y - self.y, self.leap_target_x - self.x)
+                arm_x = draw_x + int(math.cos(leap_angle) * self.size * 1.2)
+                arm_y = draw_y + int(math.sin(leap_angle) * self.size * 1.2)
+                pygame.draw.line(screen, self.skin_color, (draw_x, draw_y), (arm_x, arm_y), 6)
+                # Claws
+                pygame.draw.circle(screen, (180, 60, 60), (arm_x, arm_y), 5)
+            else:
+                # Crouched - draw hunched back
+                for i in range(2):
+                    arm_angle = self.angle + (i * 2 - 1) * 0.8
+                    arm_x = draw_x + int(math.cos(arm_angle) * self.size * 0.9)
+                    arm_y = draw_y + int(math.sin(arm_angle) * self.size * 0.9)
+                    pygame.draw.circle(screen, self.detail_color, (arm_x, arm_y), 6)
+
+        elif self.zombie_type == "necromancer":
+            # Dark robe effect
+            robe_color = getattr(self, 'robe_color', (30, 20, 40))
+            pygame.draw.circle(screen, robe_color, (draw_x, draw_y), self.size + 5)
+            pygame.draw.circle(screen, self.skin_color, (draw_x, draw_y - 5), self.size - 8)
+            # Pulsing magic energy around hands
+            energy_color = getattr(self, 'energy_color', (150, 80, 200))
+            pulse = getattr(self, 'energy_pulse', 0)
+            energy_size = 6 + int(3 * math.sin(pulse))
+            for i in range(2):
+                hand_angle = self.angle + (i * 2 - 1) * 0.6
+                hand_x = draw_x + int(math.cos(hand_angle) * self.size * 0.8)
+                hand_y = draw_y + int(math.sin(hand_angle) * self.size * 0.8)
+                pygame.draw.circle(screen, energy_color, (hand_x, hand_y), energy_size)
+            # Staff
+            staff_x = draw_x + int(math.cos(self.angle + 0.3) * self.size * 1.1)
+            staff_y = draw_y + int(math.sin(self.angle + 0.3) * self.size * 1.1)
+            pygame.draw.line(screen, (80, 60, 40), (draw_x, draw_y), (staff_x, staff_y - 15), 3)
+            pygame.draw.circle(screen, energy_color, (staff_x, staff_y - 20), 7)
+
+        elif self.zombie_type == "horde_mother":
+            # Large bloated body with distended belly
+            belly_color = getattr(self, 'belly_color', (100, 85, 90))
+            pulse = getattr(self, 'belly_pulse', 0)
+            belly_size = self.size + 10 + int(5 * math.sin(pulse))
+            # Draw belly
+            pygame.draw.circle(screen, belly_color, (draw_x, draw_y + 5), belly_size - 15)
+            # Multiple small arms
+            for i in range(4):
+                arm_angle = self.angle + i * 0.5 - 0.75
+                arm_x = draw_x + int(math.cos(arm_angle) * self.size * 0.7)
+                arm_y = draw_y + int(math.sin(arm_angle) * self.size * 0.7)
+                pygame.draw.circle(screen, self.detail_color, (arm_x, arm_y), 8)
+            # Boss crown
+            pygame.draw.polygon(screen, (150, 100, 100), [
+                (draw_x - 20, draw_y - self.size - 5),
+                (draw_x - 10, draw_y - self.size - 18),
+                (draw_x, draw_y - self.size - 8),
+                (draw_x + 10, draw_y - self.size - 18),
+                (draw_x + 20, draw_y - self.size - 5)
+            ])
+
         # Eyes (facing direction) - different for each type
         eye_offset = self.size * 0.4
         eye_x = draw_x + math.cos(self.angle) * eye_offset
@@ -1041,6 +2242,30 @@ class Zombie:
             pygame.draw.circle(screen, (255, 150, 50), (int(eye_x + 8), int(eye_y)), 7)
             pygame.draw.circle(screen, (255, 50, 0), (int(eye_x - 8), int(eye_y)), 4)
             pygame.draw.circle(screen, (255, 50, 0), (int(eye_x + 8), int(eye_y)), 4)
+        elif self.zombie_type == "screamer":
+            # Wide, hollow eyes
+            pygame.draw.circle(screen, (220, 220, 220), (int(eye_x - 5), int(eye_y)), 6)
+            pygame.draw.circle(screen, (220, 220, 220), (int(eye_x + 5), int(eye_y)), 6)
+            pygame.draw.circle(screen, (40, 40, 40), (int(eye_x - 5), int(eye_y)), 3)
+            pygame.draw.circle(screen, (40, 40, 40), (int(eye_x + 5), int(eye_y)), 3)
+        elif self.zombie_type == "leaper":
+            # Feral, yellow predator eyes
+            pygame.draw.circle(screen, (220, 200, 50), (int(eye_x - 4), int(eye_y)), 5)
+            pygame.draw.circle(screen, (220, 200, 50), (int(eye_x + 4), int(eye_y)), 5)
+            pygame.draw.circle(screen, (30, 30, 30), (int(eye_x - 4), int(eye_y)), 2)
+            pygame.draw.circle(screen, (30, 30, 30), (int(eye_x + 4), int(eye_y)), 2)
+        elif self.zombie_type == "necromancer":
+            # Glowing purple eyes
+            pygame.draw.circle(screen, (180, 100, 220), (int(eye_x - 5), int(eye_y)), 5)
+            pygame.draw.circle(screen, (180, 100, 220), (int(eye_x + 5), int(eye_y)), 5)
+            pygame.draw.circle(screen, (255, 150, 255), (int(eye_x - 5), int(eye_y)), 2)
+            pygame.draw.circle(screen, (255, 150, 255), (int(eye_x + 5), int(eye_y)), 2)
+        elif self.zombie_type == "horde_mother":
+            # Multiple small eyes - boss
+            for i in range(3):
+                offset = (i - 1) * 8
+                pygame.draw.circle(screen, (200, 150, 150), (int(eye_x + offset), int(eye_y)), 5)
+                pygame.draw.circle(screen, (100, 50, 50), (int(eye_x + offset), int(eye_y)), 2)
         else:
             # Normal red eyes
             pygame.draw.circle(screen, (200, 60, 60), (int(eye_x - 4), int(eye_y)), 4)
@@ -1091,6 +2316,9 @@ class Player:
         self.walls_built = []
         self.heal_zones = []
         self.speed_boost_timer = 0  # For Ranger speed boost
+
+        # Currency
+        self.coins = 0
 
         # Input state
         self.keys_pressed = set()
@@ -1200,6 +2428,7 @@ class Player:
         if self.invincible:
             return  # No damage when invincible
         self.health -= damage
+        sound_manager.play('player_hurt')
         if self.health < 0:
             self.health = 0
 
@@ -1525,6 +2754,9 @@ class Player:
                 color, (vx, vy), random.uniform(0.05, 0.15), random.randint(3, 6)
             ))
 
+        # Play weapon sound
+        sound_manager.play_weapon(weapon.name)
+
         # Shell casing ejection (not for rockets/grenades)
         if not weapon.explosive:
             shell_angle = self.angle + math.pi/2 + random.uniform(-0.3, 0.3)  # Eject to the side
@@ -1549,6 +2781,7 @@ class Player:
             self.is_reloading = True
             self.reload_timer = self.current_weapon.reload_time
             self.reload_time_max = self.current_weapon.reload_time
+            sound_manager.play('reload')
 
     def use_ability(self, game_world):
         # Dead players can't use abilities
@@ -2000,6 +3233,7 @@ class GameWorld:
         self.walls = []
         self.heal_zones = []
         self.particles = []
+        self.pickups = []  # Health, ammo, coins, weapons
         self.bunker = Bunker(width // 2, height // 2)
 
         # Wave system
@@ -2021,6 +3255,12 @@ class GameWorld:
         # Desert environment - generate rocks and shrubs
         self.rocks = []
         self.shrubs = []
+        # New map structures
+        self.watch_towers = []
+        self.sandbags = []
+        self.supply_crates = []
+        self.wrecked_vehicles = []
+        self.craters = []
         self.generate_desert_environment()
 
     def generate_desert_environment(self):
@@ -2061,6 +3301,20 @@ class GameWorld:
                 'branches': random.randint(3, 6)
             })
 
+        # Generate bomb craters
+        for _ in range(20):
+            while True:
+                x = random.randint(100, self.width - 100)
+                y = random.randint(100, self.height - 100)
+                dist = math.sqrt((x - self.width//2)**2 + (y - self.height//2)**2)
+                if dist > 400:
+                    break
+            self.craters.append({
+                'x': x, 'y': y,
+                'radius': random.randint(30, 80),
+                'color': (90, 80, 60)
+            })
+
     def start_wave(self, wave_num):
         self.current_wave = wave_num
         self.zombies_to_spawn = 10 + wave_num * 5
@@ -2068,6 +3322,38 @@ class GameWorld:
         self.spawn_timer = 0
         # Restore bunker health to full at start of each wave
         self.bunker.health = self.bunker.max_health
+        # Play wave start sound
+        sound_manager.play('wave_start')
+
+    def spawn_pickup(self, x, y, zombie_type="normal"):
+        """Spawn pickups when zombie dies. Drop rates vary by zombie type."""
+        # Base drop chance
+        drop_chance = random.random()
+
+        # Bosses always drop good loot
+        if zombie_type in ["zombie_king", "cage_walker", "horde_mother"]:
+            # Bosses drop multiple items
+            self.pickups.append(Pickup(x + random.randint(-30, 30), y + random.randint(-30, 30), "health"))
+            self.pickups.append(Pickup(x + random.randint(-30, 30), y + random.randint(-30, 30), "ammo"))
+            self.pickups.append(Pickup(x + random.randint(-30, 30), y + random.randint(-30, 30), "big_coin"))
+            if random.random() < 0.5:
+                self.pickups.append(Pickup(x + random.randint(-30, 30), y + random.randint(-30, 30), "weapon"))
+            return
+
+        # Special zombies have higher drop rates
+        if zombie_type in ["tank", "necromancer", "bloater"]:
+            drop_chance *= 1.5
+
+        # Determine what to drop
+        if drop_chance < 0.15:  # 15% chance for health
+            self.pickups.append(Pickup(x, y, "health"))
+        elif drop_chance < 0.25:  # 10% chance for ammo
+            self.pickups.append(Pickup(x, y, "ammo"))
+        elif drop_chance < 0.50:  # 25% chance for coin
+            self.pickups.append(Pickup(x, y, "coin"))
+        elif drop_chance < 0.52:  # 2% chance for weapon
+            self.pickups.append(Pickup(x, y, "weapon"))
+        # else: no drop (48% chance)
 
     def spawn_zombie(self):
         # Spawn at edge of map
@@ -2114,6 +3400,33 @@ class GameWorld:
         if self.current_wave >= 4:
             zombie_types.append("radioactive")
             weights.append(1)
+
+        # New zombie types
+        if self.current_wave >= 4:
+            zombie_types.append("screamer")
+            weights.append(1)
+
+        if self.current_wave >= 5:
+            zombie_types.append("leaper")
+            weights.append(2)
+
+        if self.current_wave >= 8:
+            zombie_types.append("necromancer")
+            weights.append(1)
+
+        # Horde Mother boss every 8 waves (wave 8, 16, 24, etc.)
+        if self.current_wave >= 8 and self.current_wave % 8 == 0:
+            if not hasattr(self, 'mother_spawned_this_wave'):
+                self.mother_spawned_this_wave = False
+
+            if not self.mother_spawned_this_wave:
+                zombie_type = "horde_mother"
+                self.mother_spawned_this_wave = True
+                zombie = Zombie(x, y, zombie_type, self.current_wave)
+                self.zombies.append(zombie)
+                return
+        else:
+            self.mother_spawned_this_wave = False
 
         # Zombie King spawns every 7 waves (wave 7, 14, 21, etc.)
         if self.current_wave >= 7 and self.current_wave % 7 == 0:
@@ -2213,6 +3526,11 @@ class GameWorld:
                                 if z.take_damage(exp_damage, exp_angle):
                                     self.kills += 1
                                     self.score += 100
+                                    sound_manager.play('zombie_death')
+                                    self.spawn_pickup(z.x, z.y, z.zombie_type)
+
+                        # Explosion sound
+                        sound_manager.play('explosion')
 
                         # Explosion particles
                         for _ in range(20):
@@ -2234,6 +3552,10 @@ class GameWorld:
                         if zombie.take_damage(bullet.damage, angle):
                             self.kills += 1
                             self.score += 100
+                            sound_manager.play('zombie_death')
+                            self.spawn_pickup(zombie.x, zombie.y, zombie.zombie_type)
+                        else:
+                            sound_manager.play('zombie_hit')
 
                         # Blood particles
                         for _ in range(5):
@@ -2278,6 +3600,30 @@ class GameWorld:
         for particle in self.particles[:]:
             if not particle.update(dt):
                 self.particles.remove(particle)
+
+        # Update pickups and check collection
+        for pickup in self.pickups[:]:
+            if not pickup.update(dt):
+                self.pickups.remove(pickup)
+                continue
+            # Check if any player can collect
+            for player in self.players:
+                if player.health > 0:
+                    dist = math.sqrt((player.x - pickup.x)**2 + (player.y - pickup.y)**2)
+                    if dist < player.size + pickup.size:
+                        if pickup.collect(player):
+                            pickup.active = False
+                            self.pickups.remove(pickup)
+                            # Sparkle effect
+                            for _ in range(8):
+                                p_angle = random.uniform(0, math.pi * 2)
+                                p_speed = random.uniform(50, 150)
+                                self.particles.append(Particle(
+                                    pickup.x, pickup.y, pickup.color,
+                                    (math.cos(p_angle) * p_speed, math.sin(p_angle) * p_speed),
+                                    random.uniform(0.2, 0.4), 4
+                                ))
+                            break
 
         # Update players
         for player in self.players:
@@ -2337,6 +3683,18 @@ class GameWorld:
                                        (int(end_x + math.cos(sub_angle) * sub_length),
                                         int(end_y + math.sin(sub_angle) * sub_length)), 1)
 
+        # Draw bomb craters
+        for crater in self.craters:
+            cx = int(crater['x'] - camera_offset[0])
+            cy = int(crater['y'] - camera_offset[1])
+            if -100 < cx < SCREEN_WIDTH + 100 and -100 < cy < SCREEN_HEIGHT + 100:
+                # Outer crater ring (darker)
+                pygame.draw.circle(screen, crater['color'], (cx, cy), crater['radius'])
+                # Inner darker area
+                pygame.draw.circle(screen, (60, 50, 40), (cx, cy), int(crater['radius'] * 0.7))
+                # Scorched edge
+                pygame.draw.circle(screen, (40, 35, 30), (cx, cy), crater['radius'], 3)
+
         # World boundary
         pygame.draw.rect(screen, RED, (-camera_offset[0], -camera_offset[1], self.width, self.height), 5)
 
@@ -2350,6 +3708,10 @@ class GameWorld:
 
         # Draw bunker
         self.bunker.draw(screen, camera_offset)
+
+        # Draw pickups
+        for pickup in self.pickups:
+            pickup.draw(screen, camera_offset)
 
         # Draw zombies
         for zombie in self.zombies:
@@ -2530,7 +3892,9 @@ class Game:
         self.clock = pygame.time.Clock()
         self.running = True
 
-        self.state = GameState.MENU
+        # Start at account screen for all platforms
+        self.state = GameState.ACCOUNT
+
         self.world = None
         self.local_players = []
         self.camera_offset = [0, 0]
@@ -2554,6 +3918,13 @@ class Game:
         self.ip_input = ""
         self.ip_active = False
 
+        # Account input
+        self.username_input = ""
+        self.password_input = ""
+        self.account_input_field = "username"  # "username" or "password"
+        self.account_message = ""
+        self.account_message_color = WHITE
+
         # Touch controls
         self.touch_enabled = True  # Always enable for web
         self.move_joystick = VirtualJoystick(120, SCREEN_HEIGHT - 120, 80)
@@ -2563,6 +3934,9 @@ class Game:
         self.weapon_prev_button = TouchButton(SCREEN_WIDTH - 300, SCREEN_HEIGHT - 200, 35, "Q", ORANGE)
         self.weapon_next_button = TouchButton(SCREEN_WIDTH - 220, SCREEN_HEIGHT - 200, 35, "E", ORANGE)
         self.reload_button = TouchButton(120, SCREEN_HEIGHT - 220, 35, "R", YELLOW)
+
+        # Virtual keyboard for account screen
+        self.virtual_keyboard = VirtualKeyboard()
 
     def reset_game(self):
         self.world = GameWorld()
@@ -2576,9 +3950,239 @@ class Game:
                 i,
                 self.selected_class[i]
             )
+
+            # Load unlocked weapons from account (player 1 only)
+            if i == 0:
+                saved_weapons = account_manager.user_data.get("weapons", ["pistol"])
+                for weapon_key in saved_weapons:
+                    if weapon_key in WEAPONS and weapon_key != "pistol":
+                        # Check player doesn't already have this weapon
+                        has_weapon = any(w.name == WEAPONS[weapon_key].name for w in player.weapons)
+                        if not has_weapon and len(player.weapons) < 5:
+                            player.weapons.append(WEAPONS[weapon_key])
+
+                # Load saved coins
+                player.coins = account_manager.user_data.get("coins", 0)
+
             # Player 2 uses 8/9 to aim, Player 3 uses 6/7 to aim
             self.local_players.append(player)
             self.world.players.append(player)
+
+    def handle_account_events(self, event):
+        """Handle events on account/login screen."""
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_r:  # Register
+                self.state = GameState.REGISTER
+                self.username_input = ""
+                self.password_input = ""
+                self.account_input_field = "username"
+                self.account_message = ""
+            elif event.key == pygame.K_l:  # Login
+                self.state = GameState.LOGIN
+                self.username_input = ""
+                self.password_input = ""
+                self.account_input_field = "username"
+                self.account_message = ""
+            elif event.key == pygame.K_ESCAPE:  # Guest
+                success, msg = account_manager.guest_login()
+                self.account_message = msg
+                self.account_message_color = GREEN if success else RED
+                self.state = GameState.MENU
+
+        # Touch support - large buttons
+        elif event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.FINGERDOWN:
+            if event.type == pygame.FINGERDOWN:
+                x = event.x * SCREEN_WIDTH
+                y = event.y * SCREEN_HEIGHT
+            else:
+                x, y = event.pos
+
+            # Button positions (centered, large touch-friendly)
+            btn_width = 300
+            btn_height = 80
+            btn_x = SCREEN_WIDTH // 2 - btn_width // 2
+
+            # Register button (y = 280)
+            if btn_x <= x <= btn_x + btn_width and 280 <= y <= 280 + btn_height:
+                self.state = GameState.REGISTER
+                self.username_input = ""
+                self.password_input = ""
+                self.account_input_field = "username"
+                self.account_message = ""
+            # Login button (y = 380)
+            elif btn_x <= x <= btn_x + btn_width and 380 <= y <= 380 + btn_height:
+                self.state = GameState.LOGIN
+                self.username_input = ""
+                self.password_input = ""
+                self.account_input_field = "username"
+                self.account_message = ""
+            # Guest button (y = 480)
+            elif btn_x <= x <= btn_x + btn_width and 480 <= y <= 480 + btn_height:
+                success, msg = account_manager.guest_login()
+                self.account_message = msg
+                self.account_message_color = GREEN if success else RED
+                self.state = GameState.MENU
+
+    def handle_register_events(self, event):
+        """Handle events on register screen."""
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self.state = GameState.ACCOUNT
+            elif event.key == pygame.K_TAB:
+                # Switch between username and password fields
+                if self.account_input_field == "username":
+                    self.account_input_field = "password"
+                else:
+                    self.account_input_field = "username"
+            elif event.key == pygame.K_RETURN:
+                # Submit registration
+                success, msg = account_manager.register(self.username_input, self.password_input)
+                self.account_message = msg
+                self.account_message_color = GREEN if success else RED
+                if success:
+                    self.state = GameState.MENU
+            elif event.key == pygame.K_BACKSPACE:
+                if self.account_input_field == "username":
+                    self.username_input = self.username_input[:-1]
+                else:
+                    self.password_input = self.password_input[:-1]
+            else:
+                # Type characters
+                char = event.unicode
+                if char and char.isprintable() and len(char) == 1:
+                    if self.account_input_field == "username" and len(self.username_input) < 20:
+                        self.username_input += char
+                    elif self.account_input_field == "password" and len(self.password_input) < 20:
+                        self.password_input += char
+
+        # Touch support
+        elif event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.FINGERDOWN:
+            if event.type == pygame.FINGERDOWN:
+                x = event.x * SCREEN_WIDTH
+                y = event.y * SCREEN_HEIGHT
+            else:
+                x, y = event.pos
+
+            # Check virtual keyboard first
+            key = self.virtual_keyboard.handle_click(x, y)
+            if key:
+                if key == 'BACKSPACE':
+                    if self.account_input_field == "username":
+                        self.username_input = self.username_input[:-1]
+                    else:
+                        self.password_input = self.password_input[:-1]
+                elif key == 'DONE':
+                    pass  # Keyboard hides itself
+                elif len(key) == 1:
+                    if self.account_input_field == "username" and len(self.username_input) < 20:
+                        self.username_input += key
+                    elif self.account_input_field == "password" and len(self.password_input) < 20:
+                        self.password_input += key
+                return  # Don't process other clicks when keyboard is active
+
+            btn_width = 300
+            btn_height = 60
+            btn_x = SCREEN_WIDTH // 2 - btn_width // 2
+
+            # Username field click (y = 280)
+            if btn_x <= x <= btn_x + btn_width and 280 <= y <= 280 + btn_height:
+                self.account_input_field = "username"
+                self.virtual_keyboard.show()
+            # Password field click (y = 360)
+            elif btn_x <= x <= btn_x + btn_width and 360 <= y <= 360 + btn_height:
+                self.account_input_field = "password"
+                self.virtual_keyboard.show()
+            # Submit button (y = 460)
+            elif btn_x <= x <= btn_x + btn_width and 460 <= y <= 460 + 80:
+                self.virtual_keyboard.hide()
+                success, msg = account_manager.register(self.username_input, self.password_input)
+                self.account_message = msg
+                self.account_message_color = GREEN if success else RED
+                if success:
+                    self.state = GameState.MENU
+            # Back button (y = 560)
+            elif btn_x <= x <= btn_x + btn_width and 560 <= y <= 560 + 60:
+                self.virtual_keyboard.hide()
+                self.state = GameState.ACCOUNT
+
+    def handle_login_events(self, event):
+        """Handle events on login screen."""
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self.state = GameState.ACCOUNT
+            elif event.key == pygame.K_TAB:
+                if self.account_input_field == "username":
+                    self.account_input_field = "password"
+                else:
+                    self.account_input_field = "username"
+            elif event.key == pygame.K_RETURN:
+                success, msg = account_manager.login(self.username_input, self.password_input)
+                self.account_message = msg
+                self.account_message_color = GREEN if success else RED
+                if success:
+                    self.state = GameState.MENU
+            elif event.key == pygame.K_BACKSPACE:
+                if self.account_input_field == "username":
+                    self.username_input = self.username_input[:-1]
+                else:
+                    self.password_input = self.password_input[:-1]
+            else:
+                char = event.unicode
+                if char and char.isprintable() and len(char) == 1:
+                    if self.account_input_field == "username" and len(self.username_input) < 20:
+                        self.username_input += char
+                    elif self.account_input_field == "password" and len(self.password_input) < 20:
+                        self.password_input += char
+
+        # Touch support
+        elif event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.FINGERDOWN:
+            if event.type == pygame.FINGERDOWN:
+                x = event.x * SCREEN_WIDTH
+                y = event.y * SCREEN_HEIGHT
+            else:
+                x, y = event.pos
+
+            # Check virtual keyboard first
+            key = self.virtual_keyboard.handle_click(x, y)
+            if key:
+                if key == 'BACKSPACE':
+                    if self.account_input_field == "username":
+                        self.username_input = self.username_input[:-1]
+                    else:
+                        self.password_input = self.password_input[:-1]
+                elif key == 'DONE':
+                    pass  # Keyboard hides itself
+                elif len(key) == 1:
+                    if self.account_input_field == "username" and len(self.username_input) < 20:
+                        self.username_input += key
+                    elif self.account_input_field == "password" and len(self.password_input) < 20:
+                        self.password_input += key
+                return  # Don't process other clicks when keyboard is active
+
+            btn_width = 300
+            btn_height = 60
+            btn_x = SCREEN_WIDTH // 2 - btn_width // 2
+
+            # Username field (y = 280)
+            if btn_x <= x <= btn_x + btn_width and 280 <= y <= 280 + btn_height:
+                self.account_input_field = "username"
+                self.virtual_keyboard.show()
+            # Password field (y = 360)
+            elif btn_x <= x <= btn_x + btn_width and 360 <= y <= 360 + btn_height:
+                self.account_input_field = "password"
+                self.virtual_keyboard.show()
+            # Submit button (y = 460)
+            elif btn_x <= x <= btn_x + btn_width and 460 <= y <= 460 + 80:
+                self.virtual_keyboard.hide()
+                success, msg = account_manager.login(self.username_input, self.password_input)
+                self.account_message = msg
+                self.account_message_color = GREEN if success else RED
+                if success:
+                    self.state = GameState.MENU
+            # Back button (y = 560)
+            elif btn_x <= x <= btn_x + btn_width and 560 <= y <= 560 + 60:
+                self.virtual_keyboard.hide()
+                self.state = GameState.ACCOUNT
 
     def handle_menu_events(self, event):
         if event.type == pygame.KEYDOWN:
@@ -2597,7 +4201,7 @@ class Game:
                 self.state = GameState.JOIN_GAME
                 self.ip_input = ""
             elif event.key == pygame.K_ESCAPE:
-                self.running = False
+                self.state = GameState.ACCOUNT  # Back to account screen
 
         # Touch/click support for menu
         elif event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.FINGERDOWN:
@@ -2672,6 +4276,7 @@ class Game:
                 else:
                     self.reset_game()
                 self.state = GameState.PLAYING
+                sound_manager.start_music()
 
             if event.key == pygame.K_ESCAPE:
                 if self.changing_class_in_bunker:
@@ -2704,6 +4309,7 @@ class Game:
             if all(self.class_confirmed[:self.num_local_players]):
                 self.reset_game()
                 self.state = GameState.PLAYING
+                sound_manager.start_music()
 
     def handle_host_events(self, event):
         if event.type == pygame.KEYDOWN:
@@ -2891,6 +4497,7 @@ class Game:
                 self.state = GameState.PLAYING
             elif event.key == pygame.K_q:
                 self.state = GameState.MENU
+                sound_manager.stop_music()
 
     def handle_game_over_events(self, event):
         if event.type == pygame.KEYDOWN:
@@ -2970,11 +4577,193 @@ class Game:
             all_dead = all(p.health <= 0 for p in self.local_players)
             bunker_destroyed = self.world.bunker.health <= 0
             if all_dead or bunker_destroyed:
+                # Save high score when game ends
+                account_manager.update_high_score(self.world.wave)
                 self.state = GameState.GAME_OVER
 
             # Network update
             if self.is_multiplayer and self.local_players:
                 self.network.send_player_data(self.local_players[0])
+
+    def draw_account_screen(self):
+        """Draw account/login screen with touch-friendly buttons."""
+        self.screen.fill(BLACK)
+
+        # Title
+        title = self.font_large.render("ZOMBIE SURVIVAL", True, RED)
+        subtitle = self.font_medium.render("Account", True, WHITE)
+        self.screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, 80))
+        self.screen.blit(subtitle, (SCREEN_WIDTH//2 - subtitle.get_width()//2, 160))
+
+        # Button dimensions
+        btn_width = 300
+        btn_height = 80
+        btn_x = SCREEN_WIDTH // 2 - btn_width // 2
+
+        # Register button (R key)
+        pygame.draw.rect(self.screen, GREEN, (btn_x, 280, btn_width, btn_height), border_radius=10)
+        pygame.draw.rect(self.screen, WHITE, (btn_x, 280, btn_width, btn_height), 3, border_radius=10)
+        reg_text = self.font_medium.render("REGISTER", True, BLACK)
+        self.screen.blit(reg_text, (btn_x + btn_width//2 - reg_text.get_width()//2, 295))
+
+        # Login button (L key)
+        pygame.draw.rect(self.screen, BLUE, (btn_x, 380, btn_width, btn_height), border_radius=10)
+        pygame.draw.rect(self.screen, WHITE, (btn_x, 380, btn_width, btn_height), 3, border_radius=10)
+        login_text = self.font_medium.render("LOGIN", True, WHITE)
+        self.screen.blit(login_text, (btn_x + btn_width//2 - login_text.get_width()//2, 395))
+
+        # Guest button (ESC key)
+        pygame.draw.rect(self.screen, GRAY, (btn_x, 480, btn_width, btn_height), border_radius=10)
+        pygame.draw.rect(self.screen, WHITE, (btn_x, 480, btn_width, btn_height), 3, border_radius=10)
+        guest_text = self.font_medium.render("GUEST", True, WHITE)
+        self.screen.blit(guest_text, (btn_x + btn_width//2 - guest_text.get_width()//2, 495))
+
+        # Instructions underneath
+        instructions = [
+            "Press R or tap REGISTER to create account",
+            "Press L or tap LOGIN to sign in",
+            "Press ESC or tap GUEST to play without saving"
+        ]
+        y = 600
+        for inst in instructions:
+            text = self.font_small.render(inst, True, GRAY)
+            self.screen.blit(text, (SCREEN_WIDTH//2 - text.get_width()//2, y))
+            y += 35
+
+        # Show message if any
+        if self.account_message:
+            msg_text = self.font_small.render(self.account_message, True, self.account_message_color)
+            self.screen.blit(msg_text, (SCREEN_WIDTH//2 - msg_text.get_width()//2, 230))
+
+    def draw_register_screen(self):
+        """Draw registration screen."""
+        self.screen.fill(BLACK)
+
+        # Title
+        title = self.font_large.render("REGISTER", True, GREEN)
+        self.screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, 100))
+
+        btn_width = 300
+        btn_height = 60
+        btn_x = SCREEN_WIDTH // 2 - btn_width // 2
+
+        # Username label
+        label = self.font_small.render("Username:", True, WHITE)
+        self.screen.blit(label, (btn_x, 250))
+
+        # Username input field
+        field_color = YELLOW if self.account_input_field == "username" else WHITE
+        pygame.draw.rect(self.screen, DARK_GRAY, (btn_x, 280, btn_width, btn_height))
+        pygame.draw.rect(self.screen, field_color, (btn_x, 280, btn_width, btn_height), 3)
+        user_text = self.font_medium.render(self.username_input, True, WHITE)
+        self.screen.blit(user_text, (btn_x + 10, 290))
+
+        # Password label
+        label = self.font_small.render("Password:", True, WHITE)
+        self.screen.blit(label, (btn_x, 350))
+
+        # Password input field (show asterisks)
+        field_color = YELLOW if self.account_input_field == "password" else WHITE
+        pygame.draw.rect(self.screen, DARK_GRAY, (btn_x, 380, btn_width, btn_height))
+        pygame.draw.rect(self.screen, field_color, (btn_x, 380, btn_width, btn_height), 3)
+        pass_display = "*" * len(self.password_input)
+        pass_text = self.font_medium.render(pass_display, True, WHITE)
+        self.screen.blit(pass_text, (btn_x + 10, 390))
+
+        # Submit button
+        pygame.draw.rect(self.screen, GREEN, (btn_x, 470, btn_width, 70), border_radius=10)
+        pygame.draw.rect(self.screen, WHITE, (btn_x, 470, btn_width, 70), 3, border_radius=10)
+        submit_text = self.font_medium.render("CREATE ACCOUNT", True, BLACK)
+        self.screen.blit(submit_text, (btn_x + btn_width//2 - submit_text.get_width()//2, 485))
+
+        # Back button
+        pygame.draw.rect(self.screen, GRAY, (btn_x, 560, btn_width, 50), border_radius=10)
+        back_text = self.font_small.render("BACK (ESC)", True, WHITE)
+        self.screen.blit(back_text, (btn_x + btn_width//2 - back_text.get_width()//2, 570))
+
+        # Instructions
+        instructions = [
+            "TAB to switch fields | ENTER to submit",
+            "Tap fields to select | Tap buttons to click"
+        ]
+        y = 650
+        for inst in instructions:
+            text = self.font_small.render(inst, True, GRAY)
+            self.screen.blit(text, (SCREEN_WIDTH//2 - text.get_width()//2, y))
+            y += 30
+
+        # Show message
+        if self.account_message:
+            msg_text = self.font_small.render(self.account_message, True, self.account_message_color)
+            self.screen.blit(msg_text, (SCREEN_WIDTH//2 - msg_text.get_width()//2, 180))
+
+        # Draw virtual keyboard
+        self.virtual_keyboard.draw(self.screen, self.font_small)
+
+    def draw_login_screen(self):
+        """Draw login screen."""
+        self.screen.fill(BLACK)
+
+        # Title
+        title = self.font_large.render("LOGIN", True, BLUE)
+        self.screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, 100))
+
+        btn_width = 300
+        btn_height = 60
+        btn_x = SCREEN_WIDTH // 2 - btn_width // 2
+
+        # Username label
+        label = self.font_small.render("Username:", True, WHITE)
+        self.screen.blit(label, (btn_x, 250))
+
+        # Username input field
+        field_color = YELLOW if self.account_input_field == "username" else WHITE
+        pygame.draw.rect(self.screen, DARK_GRAY, (btn_x, 280, btn_width, btn_height))
+        pygame.draw.rect(self.screen, field_color, (btn_x, 280, btn_width, btn_height), 3)
+        user_text = self.font_medium.render(self.username_input, True, WHITE)
+        self.screen.blit(user_text, (btn_x + 10, 290))
+
+        # Password label
+        label = self.font_small.render("Password:", True, WHITE)
+        self.screen.blit(label, (btn_x, 350))
+
+        # Password input field
+        field_color = YELLOW if self.account_input_field == "password" else WHITE
+        pygame.draw.rect(self.screen, DARK_GRAY, (btn_x, 380, btn_width, btn_height))
+        pygame.draw.rect(self.screen, field_color, (btn_x, 380, btn_width, btn_height), 3)
+        pass_display = "*" * len(self.password_input)
+        pass_text = self.font_medium.render(pass_display, True, WHITE)
+        self.screen.blit(pass_text, (btn_x + 10, 390))
+
+        # Submit button
+        pygame.draw.rect(self.screen, BLUE, (btn_x, 470, btn_width, 70), border_radius=10)
+        pygame.draw.rect(self.screen, WHITE, (btn_x, 470, btn_width, 70), 3, border_radius=10)
+        submit_text = self.font_medium.render("LOGIN", True, WHITE)
+        self.screen.blit(submit_text, (btn_x + btn_width//2 - submit_text.get_width()//2, 485))
+
+        # Back button
+        pygame.draw.rect(self.screen, GRAY, (btn_x, 560, btn_width, 50), border_radius=10)
+        back_text = self.font_small.render("BACK (ESC)", True, WHITE)
+        self.screen.blit(back_text, (btn_x + btn_width//2 - back_text.get_width()//2, 570))
+
+        # Instructions
+        instructions = [
+            "TAB to switch fields | ENTER to submit",
+            "Tap fields to select | Tap buttons to click"
+        ]
+        y = 650
+        for inst in instructions:
+            text = self.font_small.render(inst, True, GRAY)
+            self.screen.blit(text, (SCREEN_WIDTH//2 - text.get_width()//2, y))
+            y += 30
+
+        # Show message
+        if self.account_message:
+            msg_text = self.font_small.render(self.account_message, True, self.account_message_color)
+            self.screen.blit(msg_text, (SCREEN_WIDTH//2 - msg_text.get_width()//2, 180))
+
+        # Draw virtual keyboard
+        self.virtual_keyboard.draw(self.screen, self.font_small)
 
     def draw_menu(self):
         self.screen.fill(BLACK)
@@ -2984,6 +4773,18 @@ class Game:
         subtitle = self.font_medium.render("Class Defense", True, WHITE)
         self.screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, 100))
         self.screen.blit(subtitle, (SCREEN_WIDTH//2 - subtitle.get_width()//2, 180))
+
+        # Show logged in user info
+        user_text = f"Logged in as: {account_manager.current_user}"
+        if account_manager.is_guest:
+            user_text += " (Guest - progress won't save)"
+        user_render = self.font_small.render(user_text, True, GREEN if not account_manager.is_guest else YELLOW)
+        self.screen.blit(user_render, (SCREEN_WIDTH//2 - user_render.get_width()//2, 230))
+
+        # Show coins and high score
+        coins_text = f"Coins: ${account_manager.user_data.get('coins', 0)} | High Score: Wave {account_manager.user_data.get('high_score', 0)}"
+        coins_render = self.font_small.render(coins_text, True, YELLOW)
+        self.screen.blit(coins_render, (SCREEN_WIDTH//2 - coins_render.get_width()//2, 260))
 
         # Menu options
         options = [
@@ -2996,10 +4797,10 @@ class Game:
             ("Press J - Join Online Game" + ("" if NETWORK_AVAILABLE else " (Desktop only)"),
              WHITE if NETWORK_AVAILABLE else GRAY),
             ("", WHITE),
-            ("Press ESC - Quit", WHITE)
+            ("Press ESC - Logout", WHITE)
         ]
 
-        y = 300
+        y = 320
         for option, color in options:
             if option:
                 text = self.font_small.render(option, True, color)
@@ -3233,6 +5034,10 @@ class Game:
         kills_text = self.font_small.render(f"Kills: {self.world.kills}", True, WHITE)
         self.screen.blit(kills_text, (SCREEN_WIDTH - 200, 120))
 
+        # Coins - gold display
+        coins_text = self.font_small.render(f"$ {player.coins}", True, (255, 215, 0))
+        self.screen.blit(coins_text, (SCREEN_WIDTH - 200, 150))
+
         # Wave countdown
         if not self.world.wave_active:
             countdown = self.font_large.render(f"Next wave in: {self.world.wave_cooldown:.1f}", True, YELLOW)
@@ -3379,7 +5184,13 @@ class Game:
         self.screen.blit(menu, (SCREEN_WIDTH//2 - menu.get_width()//2, SCREEN_HEIGHT//2 + 190))
 
     def draw(self):
-        if self.state == GameState.MENU:
+        if self.state == GameState.ACCOUNT:
+            self.draw_account_screen()
+        elif self.state == GameState.REGISTER:
+            self.draw_register_screen()
+        elif self.state == GameState.LOGIN:
+            self.draw_login_screen()
+        elif self.state == GameState.MENU:
             self.draw_menu()
         elif self.state == GameState.CLASS_SELECT:
             self.draw_class_select()
@@ -3408,7 +5219,13 @@ class Game:
                 if event.type == pygame.QUIT:
                     self.running = False
 
-                if self.state == GameState.MENU:
+                if self.state == GameState.ACCOUNT:
+                    self.handle_account_events(event)
+                elif self.state == GameState.REGISTER:
+                    self.handle_register_events(event)
+                elif self.state == GameState.LOGIN:
+                    self.handle_login_events(event)
+                elif self.state == GameState.MENU:
                     self.handle_menu_events(event)
                 elif self.state == GameState.CLASS_SELECT:
                     self.handle_class_select_events(event)
