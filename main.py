@@ -387,7 +387,15 @@ class AccountManager:
         self.is_web = IS_MOBILE
         self.use_firebase = True  # Use Firebase for cloud saves
         self.firebase_url = FIREBASE_URL
-        if not self.is_web:
+        self.localStorage = None
+        if self.is_web:
+            # Get browser localStorage for web saves
+            try:
+                import platform
+                self.localStorage = platform.window.localStorage
+            except:
+                pass
+        else:
             self._ensure_save_dir()
 
     def _ensure_save_dir(self):
@@ -402,6 +410,28 @@ class AccountManager:
     def _get_save_path(self, username):
         """Get save file path for user."""
         return f"{self.save_dir}/{username}.sav"
+
+    def _web_storage_get(self, key):
+        """Get data from browser localStorage."""
+        if not self.localStorage:
+            return None
+        try:
+            data = self.localStorage.getItem(f"zs_{key}")
+            if data:
+                return json.loads(data)
+        except:
+            pass
+        return None
+
+    def _web_storage_set(self, key, data):
+        """Set data in browser localStorage."""
+        if not self.localStorage:
+            return False
+        try:
+            self.localStorage.setItem(f"zs_{key}", json.dumps(data))
+            return True
+        except:
+            return False
 
     def _firebase_get(self, path):
         """GET request to Firebase."""
@@ -468,34 +498,49 @@ class AccountManager:
                 self.user_data = {"coins": 0, "weapons": ["pistol"], "high_score": 0}
                 return True, "Account created! Progress will be saved."
 
-        # Fallback to local if not web
-        if not self.is_web:
-            save_path = self._get_save_path(username)
-            try:
-                import os
-                import json
-                if os.path.exists(save_path):
-                    return False, "Username already exists"
-                data = {
-                    "password": self._hash_password(password),
-                    "coins": 0,
-                    "weapons": ["pistol"],
-                    "high_score": 0
-                }
-                with open(save_path, 'w') as f:
-                    json.dump(data, f)
+        # Web: use browser localStorage
+        if self.is_web:
+            existing = self._web_storage_get(f"user_{safe_username}")
+            if existing:
+                return False, "Username already exists"
+            data = {
+                "password": self._hash_password(password),
+                "coins": 0,
+                "weapons": ["pistol"],
+                "high_score": 0
+            }
+            if self._web_storage_set(f"user_{safe_username}", data):
                 self.current_user = username
                 self.is_guest = False
                 self.user_data = {"coins": 0, "weapons": ["pistol"], "high_score": 0}
-                return True, "Account created (local)!"
-            except Exception as e:
-                return False, f"Error: {str(e)}"
+                return True, "Account created!"
+            else:
+                # Fallback if localStorage fails
+                self.current_user = username
+                self.is_guest = False
+                self.user_data = {"coins": 0, "weapons": ["pistol"], "high_score": 0}
+                return True, f"Welcome {username}!"
 
-        # Web without Firebase working
-        self.current_user = username
-        self.is_guest = False
-        self.user_data = {"coins": 0, "weapons": ["pistol"], "high_score": 0}
-        return True, f"Welcome {username}! (Offline mode)"
+        # Desktop: use local file
+        save_path = self._get_save_path(username)
+        try:
+            import os
+            if os.path.exists(save_path):
+                return False, "Username already exists"
+            data = {
+                "password": self._hash_password(password),
+                "coins": 0,
+                "weapons": ["pistol"],
+                "high_score": 0
+            }
+            with open(save_path, 'w') as f:
+                json.dump(data, f)
+            self.current_user = username
+            self.is_guest = False
+            self.user_data = {"coins": 0, "weapons": ["pistol"], "high_score": 0}
+            return True, "Account created (local)!"
+        except Exception as e:
+            return False, f"Error: {str(e)}"
 
     def login(self, username, password):
         """Login to existing account. Returns (success, message)."""
@@ -522,16 +567,10 @@ class AccountManager:
                 else:
                     return False, "Wrong password"
 
-        # Fallback to local
-        if not self.is_web:
-            save_path = self._get_save_path(username)
-            try:
-                import os
-                import json
-                if not os.path.exists(save_path):
-                    return False, "Account not found"
-                with open(save_path, 'r') as f:
-                    data = json.load(f)
+        # Web: use browser localStorage
+        if self.is_web:
+            data = self._web_storage_get(f"user_{safe_username}")
+            if data:
                 if data.get("password") == self._hash_password(password):
                     self.current_user = username
                     self.is_guest = False
@@ -542,10 +581,28 @@ class AccountManager:
                     }
                     return True, f"Welcome back, {username}!"
                 return False, "Wrong password"
-            except:
-                return False, "Account not found"
+            return False, "Account not found"
 
-        return False, "Account not found"
+        # Desktop: use local file
+        save_path = self._get_save_path(username)
+        try:
+            import os
+            if not os.path.exists(save_path):
+                return False, "Account not found"
+            with open(save_path, 'r') as f:
+                data = json.load(f)
+            if data.get("password") == self._hash_password(password):
+                self.current_user = username
+                self.is_guest = False
+                self.user_data = {
+                    "coins": data.get("coins", 0),
+                    "weapons": data.get("weapons", ["pistol"]),
+                    "high_score": data.get("high_score", 0)
+                }
+                return True, f"Welcome back, {username}!"
+            return False, "Wrong password"
+        except:
+            return False, "Account not found"
 
     def guest_login(self):
         """Login as guest (no save)."""
@@ -572,24 +629,32 @@ class AccountManager:
                 if self._firebase_put(f"users/{safe_username}", existing):
                     return True
 
-        # Fallback to local
-        if not self.is_web:
-            save_path = self._get_save_path(self.current_user)
-            try:
-                import json
-                import os
-                data = {}
-                if os.path.exists(save_path):
-                    with open(save_path, 'r') as f:
-                        data = json.load(f)
-                data["coins"] = self.user_data.get("coins", 0)
-                data["weapons"] = self.user_data.get("weapons", ["pistol"])
-                data["high_score"] = self.user_data.get("high_score", 0)
-                with open(save_path, 'w') as f:
-                    json.dump(data, f)
-                return True
-            except:
-                pass
+        # Web: use browser localStorage
+        if self.is_web:
+            existing = self._web_storage_get(f"user_{safe_username}")
+            if existing:
+                existing["coins"] = self.user_data.get("coins", 0)
+                existing["weapons"] = self.user_data.get("weapons", ["pistol"])
+                existing["high_score"] = self.user_data.get("high_score", 0)
+                return self._web_storage_set(f"user_{safe_username}", existing)
+            return False
+
+        # Desktop: use local file
+        save_path = self._get_save_path(self.current_user)
+        try:
+            import os
+            data = {}
+            if os.path.exists(save_path):
+                with open(save_path, 'r') as f:
+                    data = json.load(f)
+            data["coins"] = self.user_data.get("coins", 0)
+            data["weapons"] = self.user_data.get("weapons", ["pistol"])
+            data["high_score"] = self.user_data.get("high_score", 0)
+            with open(save_path, 'w') as f:
+                json.dump(data, f)
+            return True
+        except:
+            pass
         return False
 
     def add_coins(self, amount):
