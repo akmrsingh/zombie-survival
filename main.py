@@ -1132,6 +1132,20 @@ def get_random_weapon():
     weights = list(WEAPON_RARITY.values())
     return random.choices(weapons, weights=weights, k=1)[0]
 
+def get_weapon_rarity(weapon_key):
+    """Get the rarity tier and color for a weapon."""
+    weight = WEAPON_RARITY.get(weapon_key, 50)
+    if weight >= 70:
+        return "Common", (150, 150, 150)  # Gray
+    elif weight >= 50:
+        return "Uncommon", (0, 200, 0)  # Green
+    elif weight >= 30:
+        return "Rare", (0, 120, 255)  # Blue
+    elif weight >= 15:
+        return "Epic", (200, 0, 255)  # Purple
+    else:
+        return "Legendary", (255, 180, 0)  # Gold/Orange
+
 
 class VirtualJoystick:
     """Virtual joystick for touch controls."""
@@ -1579,12 +1593,14 @@ class Pickup:
                     # Save unlocked weapon to account
                     account_manager.unlock_weapon(self.weapon_key)
                     sound_manager.play('reload')
-                    return True
+                    # Return weapon info for popup (weapon, is_new)
+                    return (new_weapon, True)
                 elif has_weapon:
                     # Refill ammo instead
                     player.reserve_ammo = player.current_weapon.max_ammo
                     sound_manager.play('reload')
-                    return True
+                    # Return weapon info for popup (weapon, is_new=False means ammo refill)
+                    return (new_weapon, False)
             return False
 
         return False
@@ -3290,6 +3306,7 @@ class GameWorld:
         self.heal_zones = []
         self.particles = []
         self.pickups = []  # Health, ammo, coins, weapons
+        self.weapon_popup_queue = []  # Queue for weapon pickup popups
         self.bunker = Bunker(width // 2, height // 2)
 
         # Wave system
@@ -3667,9 +3684,14 @@ class GameWorld:
                 if player.health > 0:
                     dist = math.sqrt((player.x - pickup.x)**2 + (player.y - pickup.y)**2)
                     if dist < player.size + pickup.size:
-                        if pickup.collect(player):
+                        result = pickup.collect(player)
+                        if result:
                             pickup.active = False
                             self.pickups.remove(pickup)
+                            # Check if it's a weapon pickup (returns tuple)
+                            if isinstance(result, tuple):
+                                weapon, is_new = result
+                                self.weapon_popup_queue.append((weapon, is_new))
                             # Sparkle effect
                             for _ in range(8):
                                 p_angle = random.uniform(0, math.pi * 2)
@@ -3993,6 +4015,11 @@ class Game:
 
         # Virtual keyboard for account screen
         self.virtual_keyboard = VirtualKeyboard()
+
+        # Weapon pickup popup
+        self.weapon_popup_active = False
+        self.weapon_popup_weapon = None
+        self.weapon_popup_is_new = False
 
     def reset_game(self):
         self.world = GameWorld()
@@ -4393,6 +4420,25 @@ class Game:
                     self.ip_input += event.unicode
 
     def handle_playing_events(self, event):
+        # Handle weapon popup first (blocks other input)
+        if self.weapon_popup_active:
+            if event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_ESCAPE):
+                    self.weapon_popup_active = False
+                    self.weapon_popup_weapon = None
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if hasattr(self, 'weapon_popup_btn_rect') and self.weapon_popup_btn_rect.collidepoint(event.pos):
+                    self.weapon_popup_active = False
+                    self.weapon_popup_weapon = None
+            elif event.type == pygame.FINGERDOWN:
+                # Touch support for OK button
+                touch_x = int(event.x * SCREEN_WIDTH)
+                touch_y = int(event.y * SCREEN_HEIGHT)
+                if hasattr(self, 'weapon_popup_btn_rect') and self.weapon_popup_btn_rect.collidepoint(touch_x, touch_y):
+                    self.weapon_popup_active = False
+                    self.weapon_popup_weapon = None
+            return  # Don't process other events while popup is active
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self.state = GameState.PAUSED
@@ -4597,8 +4643,16 @@ class Game:
                     if not pygame.mouse.get_pressed()[0]:
                         player.mouse_buttons[0] = False
 
-            # Update world
-            self.world.update(dt)
+            # Update world (only if not showing weapon popup in solo mode)
+            if not self.weapon_popup_active:
+                self.world.update(dt)
+
+                # Check for weapon pickups to show popup (solo mode only)
+                if not self.is_multiplayer and self.world.weapon_popup_queue:
+                    weapon, is_new = self.world.weapon_popup_queue.pop(0)
+                    self.weapon_popup_active = True
+                    self.weapon_popup_weapon = weapon
+                    self.weapon_popup_is_new = is_new
 
             # Update camera to follow first alive player
             if self.local_players:
@@ -5239,6 +5293,88 @@ class Game:
         self.screen.blit(retry, (SCREEN_WIDTH//2 - retry.get_width()//2, SCREEN_HEIGHT//2 + 150))
         self.screen.blit(menu, (SCREEN_WIDTH//2 - menu.get_width()//2, SCREEN_HEIGHT//2 + 190))
 
+    def draw_weapon_popup(self):
+        """Draw weapon pickup popup with rarity background."""
+        if not self.weapon_popup_weapon:
+            return
+
+        weapon = self.weapon_popup_weapon
+        is_new = self.weapon_popup_is_new
+
+        # Find weapon key from WEAPONS
+        weapon_key = None
+        for key, w in WEAPONS.items():
+            if w.name == weapon.name:
+                weapon_key = key
+                break
+
+        rarity_name, rarity_color = get_weapon_rarity(weapon_key) if weapon_key else ("Unknown", (150, 150, 150))
+
+        # Semi-transparent dark overlay
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        overlay.fill(BLACK)
+        overlay.set_alpha(180)
+        self.screen.blit(overlay, (0, 0))
+
+        # Popup box dimensions
+        popup_width = 450
+        popup_height = 320
+        popup_x = SCREEN_WIDTH // 2 - popup_width // 2
+        popup_y = SCREEN_HEIGHT // 2 - popup_height // 2
+
+        # Draw rarity gradient background
+        for i in range(popup_height):
+            alpha = int(200 - (i / popup_height) * 50)
+            color = tuple(max(0, min(255, int(c * (0.3 + 0.7 * (1 - i/popup_height))))) for c in rarity_color)
+            pygame.draw.line(self.screen, color, (popup_x, popup_y + i), (popup_x + popup_width, popup_y + i))
+
+        # Border with rarity color
+        pygame.draw.rect(self.screen, rarity_color, (popup_x, popup_y, popup_width, popup_height), 4)
+        pygame.draw.rect(self.screen, WHITE, (popup_x + 2, popup_y + 2, popup_width - 4, popup_height - 4), 2)
+
+        # Title based on new weapon or ammo refill
+        if is_new:
+            title_text = "NEW WEAPON!"
+            title_color = (255, 255, 100)
+        else:
+            title_text = "AMMO REFILLED"
+            title_color = (100, 255, 100)
+
+        title = self.font_large.render(title_text, True, title_color)
+        self.screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, popup_y + 20))
+
+        # Weapon name
+        weapon_name = self.font_medium.render(weapon.name, True, WHITE)
+        self.screen.blit(weapon_name, (SCREEN_WIDTH//2 - weapon_name.get_width()//2, popup_y + 90))
+
+        # Rarity label
+        rarity_label = self.font_small.render(rarity_name.upper(), True, rarity_color)
+        self.screen.blit(rarity_label, (SCREEN_WIDTH//2 - rarity_label.get_width()//2, popup_y + 140))
+
+        # Weapon stats
+        stats_y = popup_y + 180
+        damage_text = self.font_small.render(f"Damage: {weapon.damage}", True, WHITE)
+        fire_rate_text = self.font_small.render(f"Fire Rate: {weapon.fire_rate}/s", True, WHITE)
+        ammo_text = self.font_small.render(f"Ammo: {weapon.max_ammo}", True, WHITE)
+
+        self.screen.blit(damage_text, (popup_x + 40, stats_y))
+        self.screen.blit(fire_rate_text, (popup_x + 40, stats_y + 30))
+        self.screen.blit(ammo_text, (popup_x + 250, stats_y))
+
+        # OK button
+        btn_width = 150
+        btn_height = 50
+        btn_x = SCREEN_WIDTH // 2 - btn_width // 2
+        btn_y = popup_y + popup_height - 70
+
+        pygame.draw.rect(self.screen, GREEN, (btn_x, btn_y, btn_width, btn_height), border_radius=10)
+        pygame.draw.rect(self.screen, WHITE, (btn_x, btn_y, btn_width, btn_height), 3, border_radius=10)
+        ok_text = self.font_medium.render("OK", True, BLACK)
+        self.screen.blit(ok_text, (btn_x + btn_width//2 - ok_text.get_width()//2, btn_y + btn_height//2 - ok_text.get_height()//2))
+
+        # Store button rect for click detection
+        self.weapon_popup_btn_rect = pygame.Rect(btn_x, btn_y, btn_width, btn_height)
+
     def draw(self):
         if self.state == GameState.ACCOUNT:
             self.draw_account_screen()
@@ -5257,6 +5393,9 @@ class Game:
         elif self.state == GameState.PLAYING:
             self.world.draw(self.screen, self.camera_offset)
             self.draw_hud()
+            # Draw weapon popup on top if active
+            if self.weapon_popup_active:
+                self.draw_weapon_popup()
         elif self.state == GameState.PAUSED:
             self.world.draw(self.screen, self.camera_offset)
             self.draw_hud()
