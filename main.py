@@ -477,28 +477,10 @@ class AccountManager:
         if len(password) < 3:
             return False, "Password must be at least 3 characters"
 
-        # Sanitize username for Firebase path
+        # Sanitize username for path
         safe_username = username.lower().replace(".", "_").replace("#", "_").replace("$", "_").replace("[", "_").replace("]", "_")
 
-        # Try Firebase first
-        if self.use_firebase:
-            existing = self._firebase_get(f"users/{safe_username}")
-            if existing:
-                return False, "Username already exists"
-
-            data = {
-                "password": self._hash_password(password),
-                "coins": 0,
-                "weapons": ["pistol"],
-                "high_score": 0
-            }
-            if self._firebase_put(f"users/{safe_username}", data):
-                self.current_user = username
-                self.is_guest = False
-                self.user_data = {"coins": 0, "weapons": ["pistol"], "high_score": 0}
-                return True, "Account created! Progress will be saved."
-
-        # Web: use browser localStorage
+        # Web: use browser localStorage (check first to avoid Firebase blocking)
         if self.is_web:
             existing = self._web_storage_get(f"user_{safe_username}")
             if existing:
@@ -551,23 +533,7 @@ class AccountManager:
 
         safe_username = username.lower().replace(".", "_").replace("#", "_").replace("$", "_").replace("[", "_").replace("]", "_")
 
-        # Try Firebase first
-        if self.use_firebase:
-            data = self._firebase_get(f"users/{safe_username}")
-            if data:
-                if data.get("password") == self._hash_password(password):
-                    self.current_user = username
-                    self.is_guest = False
-                    self.user_data = {
-                        "coins": data.get("coins", 0),
-                        "weapons": data.get("weapons", ["pistol"]),
-                        "high_score": data.get("high_score", 0)
-                    }
-                    return True, f"Welcome back, {username}!"
-                else:
-                    return False, "Wrong password"
-
-        # Web: use browser localStorage
+        # Web: use browser localStorage (check first to avoid Firebase blocking)
         if self.is_web:
             data = self._web_storage_get(f"user_{safe_username}")
             if data:
@@ -582,6 +548,22 @@ class AccountManager:
                     return True, f"Welcome back, {username}!"
                 return False, "Wrong password"
             return False, "Account not found"
+
+        # Desktop: Try Firebase first
+        if self.use_firebase and not self.is_web:
+            data = self._firebase_get(f"users/{safe_username}")
+            if data:
+                if data.get("password") == self._hash_password(password):
+                    self.current_user = username
+                    self.is_guest = False
+                    self.user_data = {
+                        "coins": data.get("coins", 0),
+                        "weapons": data.get("weapons", ["pistol"]),
+                        "high_score": data.get("high_score", 0)
+                    }
+                    return True, f"Welcome back, {username}!"
+                else:
+                    return False, "Wrong password"
 
         # Desktop: use local file
         save_path = self._get_save_path(username)
@@ -618,18 +600,7 @@ class AccountManager:
 
         safe_username = self.current_user.lower().replace(".", "_").replace("#", "_").replace("$", "_").replace("[", "_").replace("]", "_")
 
-        # Try Firebase first
-        if self.use_firebase:
-            # Get existing data to preserve password
-            existing = self._firebase_get(f"users/{safe_username}")
-            if existing:
-                existing["coins"] = self.user_data.get("coins", 0)
-                existing["weapons"] = self.user_data.get("weapons", ["pistol"])
-                existing["high_score"] = self.user_data.get("high_score", 0)
-                if self._firebase_put(f"users/{safe_username}", existing):
-                    return True
-
-        # Web: use browser localStorage
+        # Web: use browser localStorage (check first to avoid Firebase blocking)
         if self.is_web:
             existing = self._web_storage_get(f"user_{safe_username}")
             if existing:
