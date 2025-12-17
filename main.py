@@ -1630,12 +1630,32 @@ class Pickup:
             screen.blit(text, (draw_x - text.get_width()//2, draw_y - text.get_height()//2))
 
         elif self.pickup_type == "weapon":
-            # Weapon crate
-            pygame.draw.rect(screen, self.color, (draw_x - self.size//2, draw_y - self.size//2, self.size, self.size))
-            pygame.draw.rect(screen, (100, 100, 100), (draw_x - self.size//2, draw_y - self.size//2, self.size, self.size), 2)
-            # Gun symbol
-            pygame.draw.rect(screen, (80, 80, 80), (draw_x - 8, draw_y - 2, 16, 4))
-            pygame.draw.rect(screen, (80, 80, 80), (draw_x + 2, draw_y - 2, 4, 8))
+            # Military weapon crate - olive green with markings
+            crate_size = self.size + 4
+            cx = draw_x - crate_size//2
+            cy = draw_y - crate_size//2
+
+            # Main crate body (olive drab green)
+            pygame.draw.rect(screen, (85, 107, 47), (cx, cy, crate_size, crate_size))
+            # Darker edges for 3D effect
+            pygame.draw.rect(screen, (60, 80, 30), (cx, cy, crate_size, crate_size), 3)
+            # Wooden slat lines
+            pygame.draw.line(screen, (60, 80, 30), (cx + 4, cy), (cx + 4, cy + crate_size), 1)
+            pygame.draw.line(screen, (60, 80, 30), (cx + crate_size - 4, cy), (cx + crate_size - 4, cy + crate_size), 1)
+            # Metal corner brackets
+            bracket_color = (70, 70, 70)
+            pygame.draw.rect(screen, bracket_color, (cx, cy, 6, 6))
+            pygame.draw.rect(screen, bracket_color, (cx + crate_size - 6, cy, 6, 6))
+            pygame.draw.rect(screen, bracket_color, (cx, cy + crate_size - 6, 6, 6))
+            pygame.draw.rect(screen, bracket_color, (cx + crate_size - 6, cy + crate_size - 6, 6, 6))
+            # Gun icon in center (white/light)
+            pygame.draw.rect(screen, (220, 220, 200), (draw_x - 10, draw_y - 2, 20, 5))  # Barrel
+            pygame.draw.rect(screen, (220, 220, 200), (draw_x - 6, draw_y - 5, 8, 10))   # Body
+            pygame.draw.rect(screen, (220, 220, 200), (draw_x - 2, draw_y + 2, 4, 6))    # Grip
+            # "?" to indicate random weapon
+            font = pygame.font.Font(None, 16)
+            q_text = font.render("?", True, (255, 255, 0))
+            screen.blit(q_text, (draw_x + 6, draw_y - 10))
 
 
 class Zombie:
