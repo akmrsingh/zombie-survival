@@ -1595,13 +1595,12 @@ class Pickup:
                     sound_manager.play('reload')
                     # Return weapon info for popup (weapon, is_new=False means ammo refill)
                     return (new_weapon, False)
-                elif len(player.weapons) < 5:
-                    # Add new weapon to inventory
+                else:
+                    # Add new weapon to inventory (no limit)
                     player.weapons.append(new_weapon)
                     account_manager.unlock_weapon(self.weapon_key)
                     sound_manager.play('reload')
                     return (new_weapon, True)
-                # Inventory full - can't pick up
             return False
 
         return False
