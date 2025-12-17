@@ -1601,13 +1601,7 @@ class Pickup:
                     account_manager.unlock_weapon(self.weapon_key)
                     sound_manager.play('reload')
                     return (new_weapon, True)
-                else:
-                    # Inventory full - replace current weapon
-                    old_weapon = player.current_weapon
-                    player.weapons[player.current_weapon_index] = new_weapon
-                    account_manager.unlock_weapon(self.weapon_key)
-                    sound_manager.play('reload')
-                    return (new_weapon, True)
+                # Inventory full - can't pick up
             return False
 
         return False
