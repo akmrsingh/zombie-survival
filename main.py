@@ -1589,19 +1589,25 @@ class Pickup:
                 new_weapon = WEAPONS[self.weapon_key]
                 # Check if player already has this weapon
                 has_weapon = any(w.name == new_weapon.name for w in player.weapons)
-                if not has_weapon and len(player.weapons) < 5:
-                    player.weapons.append(new_weapon)
-                    # Save unlocked weapon to account
-                    account_manager.unlock_weapon(self.weapon_key)
-                    sound_manager.play('reload')
-                    # Return weapon info for popup (weapon, is_new)
-                    return (new_weapon, True)
-                elif has_weapon:
-                    # Refill ammo instead
+                if has_weapon:
+                    # Already have this weapon - refill ammo instead
                     player.reserve_ammo = player.current_weapon.max_ammo
                     sound_manager.play('reload')
                     # Return weapon info for popup (weapon, is_new=False means ammo refill)
                     return (new_weapon, False)
+                elif len(player.weapons) < 5:
+                    # Add new weapon to inventory
+                    player.weapons.append(new_weapon)
+                    account_manager.unlock_weapon(self.weapon_key)
+                    sound_manager.play('reload')
+                    return (new_weapon, True)
+                else:
+                    # Inventory full - replace current weapon
+                    old_weapon = player.current_weapon
+                    player.weapons[player.current_weapon_index] = new_weapon
+                    account_manager.unlock_weapon(self.weapon_key)
+                    sound_manager.play('reload')
+                    return (new_weapon, True)
             return False
 
         return False
