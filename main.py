@@ -1102,8 +1102,39 @@ def get_random_weapon():
     weights = list(WEAPON_RARITY.values())
     return random.choices(weapons, weights=weights, k=1)[0]
 
+# Special exotic weapons that only drop from weapon crates
+WEAPON_CRATE_WEAPONS = {
+    "flamethrower": 20,      # Continuous fire damage
+    "laser_gun": 8,          # Energy beam weapon (rarest)
+    "crossbow": 35,          # Silent, high damage
+    "electric_gun": 15,      # Chain lightning to nearby enemies
+    "freeze_ray": 50,        # Slows enemies down (most common)
+    "dual_pistols": 30,      # Two handguns at once
+    "throwing_knives": 70,   # Ranged melee (most common)
+}
+
+def get_crate_weapon():
+    """Get a random exotic weapon for weapon crates only."""
+    weapons = list(WEAPON_CRATE_WEAPONS.keys())
+    weights = list(WEAPON_CRATE_WEAPONS.values())
+    return random.choices(weapons, weights=weights, k=1)[0]
+
 def get_weapon_rarity(weapon_key):
-    """Get the rarity tier and color for a weapon."""
+    """Get the rarity tier and color for a weapon based on crate drop rates."""
+    # Check crate weapons first (these are the exotic weapons)
+    if weapon_key in WEAPON_CRATE_WEAPONS:
+        weight = WEAPON_CRATE_WEAPONS[weapon_key]
+        if weight >= 70:
+            return "Common", (150, 150, 150)  # Gray - Throwing Knives
+        elif weight >= 50:
+            return "Uncommon", (0, 200, 0)  # Green - Freeze Ray
+        elif weight >= 30:
+            return "Rare", (0, 120, 255)  # Blue - Crossbow, Dual Pistols
+        elif weight >= 15:
+            return "Epic", (200, 0, 255)  # Purple - Flamethrower, Electric Gun
+        else:
+            return "Legendary", (255, 180, 0)  # Gold - Laser Gun
+    # Fall back to regular weapon rarity
     weight = WEAPON_RARITY.get(weapon_key, 50)
     if weight >= 70:
         return "Common", (150, 150, 150)  # Gray
@@ -1518,7 +1549,7 @@ class Pickup:
             self.color = (150, 150, 150)  # Silver/gray
             self.value = 0  # Random weapon
             self.size = 22
-            self.weapon_key = get_random_weapon()  # Use rarity-weighted selection
+            self.weapon_key = get_crate_weapon()  # Only exotic weapons from crates
 
     def update(self, dt):
         self.spawn_time += dt
