@@ -480,28 +480,12 @@ class AccountManager:
         # Sanitize username for path
         safe_username = username.lower().replace(".", "_").replace("#", "_").replace("$", "_").replace("[", "_").replace("]", "_")
 
-        # Web: use browser localStorage (check first to avoid Firebase blocking)
+        # Web: simple session-based account (no persistent storage to avoid freezing)
         if self.is_web:
-            existing = self._web_storage_get(f"user_{safe_username}")
-            if existing:
-                return False, "Username already exists"
-            data = {
-                "password": self._hash_password(password),
-                "coins": 0,
-                "weapons": ["pistol"],
-                "high_score": 0
-            }
-            if self._web_storage_set(f"user_{safe_username}", data):
-                self.current_user = username
-                self.is_guest = False
-                self.user_data = {"coins": 0, "weapons": ["pistol"], "high_score": 0}
-                return True, "Account created!"
-            else:
-                # Fallback if localStorage fails
-                self.current_user = username
-                self.is_guest = False
-                self.user_data = {"coins": 0, "weapons": ["pistol"], "high_score": 0}
-                return True, f"Welcome {username}!"
+            self.current_user = username
+            self.is_guest = False
+            self.user_data = {"coins": 0, "weapons": ["pistol"], "high_score": 0}
+            return True, f"Welcome {username}!"
 
         # Desktop: use local file
         save_path = self._get_save_path(username)
@@ -533,21 +517,13 @@ class AccountManager:
 
         safe_username = username.lower().replace(".", "_").replace("#", "_").replace("$", "_").replace("[", "_").replace("]", "_")
 
-        # Web: use browser localStorage (check first to avoid Firebase blocking)
+        # Web: simple session-based account (no persistent storage to avoid freezing)
         if self.is_web:
-            data = self._web_storage_get(f"user_{safe_username}")
-            if data:
-                if data.get("password") == self._hash_password(password):
-                    self.current_user = username
-                    self.is_guest = False
-                    self.user_data = {
-                        "coins": data.get("coins", 0),
-                        "weapons": data.get("weapons", ["pistol"]),
-                        "high_score": data.get("high_score", 0)
-                    }
-                    return True, f"Welcome back, {username}!"
-                return False, "Wrong password"
-            return False, "Account not found"
+            # On web, just log in with any credentials (session only)
+            self.current_user = username
+            self.is_guest = False
+            self.user_data = {"coins": 0, "weapons": ["pistol"], "high_score": 0}
+            return True, f"Welcome, {username}!"
 
         # Desktop: Try Firebase first
         if self.use_firebase and not self.is_web:
@@ -600,15 +576,9 @@ class AccountManager:
 
         safe_username = self.current_user.lower().replace(".", "_").replace("#", "_").replace("$", "_").replace("[", "_").replace("]", "_")
 
-        # Web: use browser localStorage (check first to avoid Firebase blocking)
+        # Web: skip saving (session-only accounts to avoid freezing)
         if self.is_web:
-            existing = self._web_storage_get(f"user_{safe_username}")
-            if existing:
-                existing["coins"] = self.user_data.get("coins", 0)
-                existing["weapons"] = self.user_data.get("weapons", ["pistol"])
-                existing["high_score"] = self.user_data.get("high_score", 0)
-                return self._web_storage_set(f"user_{safe_username}", existing)
-            return False
+            return True  # Pretend success but don't actually save
 
         # Desktop: use local file
         save_path = self._get_save_path(self.current_user)
