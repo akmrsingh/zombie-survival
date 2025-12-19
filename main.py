@@ -1148,6 +1148,206 @@ def get_weapon_rarity(weapon_key):
         return "Legendary", (255, 180, 0)  # Gold/Orange
 
 
+class VisualEffects:
+    """Manages visual effects like particles, blood splatters, screen shake."""
+    def __init__(self):
+        self.particles = []  # General particles
+        self.blood_splatters = []  # Blood on ground
+        self.muzzle_flashes = []  # Muzzle flash effects
+        self.bullet_trails = []  # Bullet trail lines
+        self.screen_shake = 0  # Screen shake intensity
+        self.screen_shake_offset = (0, 0)
+        self.debris = []  # Ground debris (generated once)
+        self.generate_debris()
+
+    def generate_debris(self):
+        """Generate random ground debris for environment detail."""
+        for _ in range(50):
+            self.debris.append({
+                'x': random.randint(-500, 4500),
+                'y': random.randint(-500, 4500),
+                'type': random.choice(['rock', 'crack', 'rubble', 'bones']),
+                'size': random.randint(5, 20),
+                'color_var': random.randint(-20, 20)
+            })
+
+    def add_muzzle_flash(self, x, y, angle, size=15):
+        """Add a muzzle flash effect."""
+        self.muzzle_flashes.append({
+            'x': x, 'y': y, 'angle': angle,
+            'size': size, 'life': 0.08
+        })
+
+    def add_blood_splatter(self, x, y, amount=5):
+        """Add blood particles and ground splatter."""
+        # Blood particles that fly out
+        for _ in range(amount):
+            angle = random.uniform(0, math.pi * 2)
+            speed = random.uniform(50, 150)
+            self.particles.append({
+                'x': x, 'y': y,
+                'vx': math.cos(angle) * speed,
+                'vy': math.sin(angle) * speed,
+                'life': random.uniform(0.3, 0.6),
+                'size': random.randint(2, 5),
+                'color': (random.randint(100, 180), 0, 0),
+                'type': 'blood'
+            })
+        # Permanent ground splatter
+        self.blood_splatters.append({
+            'x': x, 'y': y,
+            'size': random.randint(8, 20),
+            'alpha': 200
+        })
+        # Limit ground splatters
+        if len(self.blood_splatters) > 100:
+            self.blood_splatters.pop(0)
+
+    def add_bullet_trail(self, start_x, start_y, end_x, end_y, color=(255, 255, 150)):
+        """Add a bullet trail effect."""
+        self.bullet_trails.append({
+            'start': (start_x, start_y),
+            'end': (end_x, end_y),
+            'life': 0.1,
+            'color': color
+        })
+
+    def add_hit_particles(self, x, y, color=(200, 200, 200), amount=3):
+        """Add impact particles."""
+        for _ in range(amount):
+            angle = random.uniform(0, math.pi * 2)
+            speed = random.uniform(30, 80)
+            self.particles.append({
+                'x': x, 'y': y,
+                'vx': math.cos(angle) * speed,
+                'vy': math.sin(angle) * speed,
+                'life': random.uniform(0.2, 0.4),
+                'size': random.randint(2, 4),
+                'color': color,
+                'type': 'spark'
+            })
+
+    def shake_screen(self, intensity):
+        """Trigger screen shake."""
+        self.screen_shake = max(self.screen_shake, intensity)
+
+    def update(self, dt):
+        """Update all visual effects."""
+        # Update screen shake
+        if self.screen_shake > 0:
+            self.screen_shake_offset = (
+                random.uniform(-self.screen_shake, self.screen_shake),
+                random.uniform(-self.screen_shake, self.screen_shake)
+            )
+            self.screen_shake = max(0, self.screen_shake - dt * 50)
+        else:
+            self.screen_shake_offset = (0, 0)
+
+        # Update particles
+        for p in self.particles[:]:
+            p['x'] += p['vx'] * dt
+            p['y'] += p['vy'] * dt
+            p['vy'] += 200 * dt  # Gravity
+            p['life'] -= dt
+            if p['life'] <= 0:
+                self.particles.remove(p)
+
+        # Update muzzle flashes
+        for m in self.muzzle_flashes[:]:
+            m['life'] -= dt
+            if m['life'] <= 0:
+                self.muzzle_flashes.remove(m)
+
+        # Update bullet trails
+        for t in self.bullet_trails[:]:
+            t['life'] -= dt
+            if t['life'] <= 0:
+                self.bullet_trails.remove(t)
+
+        # Fade blood splatters slowly
+        for b in self.blood_splatters[:]:
+            b['alpha'] = max(50, b['alpha'] - dt * 2)
+
+    def draw_ground_effects(self, screen, camera_offset):
+        """Draw effects that appear on the ground (under characters)."""
+        # Draw debris
+        for d in self.debris:
+            dx = int(d['x'] - camera_offset[0])
+            dy = int(d['y'] - camera_offset[1])
+            if -50 < dx < SCREEN_WIDTH + 50 and -50 < dy < SCREEN_HEIGHT + 50:
+                if d['type'] == 'rock':
+                    color = (150 + d['color_var'], 140 + d['color_var'], 130 + d['color_var'])
+                    pygame.draw.circle(screen, color, (dx, dy), d['size'] // 2)
+                elif d['type'] == 'crack':
+                    color = (160 + d['color_var'], 140 + d['color_var'], 100 + d['color_var'])
+                    pygame.draw.line(screen, color, (dx - d['size'], dy), (dx + d['size'], dy + d['size']//2), 2)
+                    pygame.draw.line(screen, color, (dx, dy), (dx + d['size']//2, dy + d['size']), 2)
+                elif d['type'] == 'rubble':
+                    color = (140 + d['color_var'], 130 + d['color_var'], 110 + d['color_var'])
+                    for i in range(3):
+                        pygame.draw.circle(screen, color, (dx + i*5, dy + i*3), d['size'] // 4)
+                elif d['type'] == 'bones':
+                    color = (220, 210, 190)
+                    pygame.draw.line(screen, color, (dx - d['size']//2, dy), (dx + d['size']//2, dy), 3)
+                    pygame.draw.circle(screen, color, (dx - d['size']//2, dy), 3)
+
+        # Draw blood splatters on ground
+        for b in self.blood_splatters:
+            bx = int(b['x'] - camera_offset[0])
+            by = int(b['y'] - camera_offset[1])
+            if -50 < bx < SCREEN_WIDTH + 50 and -50 < by < SCREEN_HEIGHT + 50:
+                alpha = int(b['alpha'])
+                # Draw irregular blood shape
+                color = (80, 0, 0)
+                pygame.draw.circle(screen, color, (bx, by), b['size'])
+                pygame.draw.circle(screen, color, (bx + b['size']//3, by - b['size']//4), b['size']//2)
+                pygame.draw.circle(screen, color, (bx - b['size']//4, by + b['size']//3), b['size']//2)
+
+    def draw_effects(self, screen, camera_offset):
+        """Draw effects that appear above ground (particles, trails, flashes)."""
+        # Draw bullet trails
+        for t in self.bullet_trails:
+            alpha = int(255 * (t['life'] / 0.1))
+            start = (int(t['start'][0] - camera_offset[0]), int(t['start'][1] - camera_offset[1]))
+            end = (int(t['end'][0] - camera_offset[0]), int(t['end'][1] - camera_offset[1]))
+            pygame.draw.line(screen, t['color'], start, end, 2)
+
+        # Draw particles
+        for p in self.particles:
+            px = int(p['x'] - camera_offset[0])
+            py = int(p['y'] - camera_offset[1])
+            if 0 < px < SCREEN_WIDTH and 0 < py < SCREEN_HEIGHT:
+                pygame.draw.circle(screen, p['color'], (px, py), p['size'])
+
+        # Draw muzzle flashes
+        for m in self.muzzle_flashes:
+            mx = int(m['x'] - camera_offset[0])
+            my = int(m['y'] - camera_offset[1])
+            if 0 < mx < SCREEN_WIDTH and 0 < my < SCREEN_HEIGHT:
+                # Draw bright flash
+                flash_size = int(m['size'] * (m['life'] / 0.08))
+                # Core (white/yellow)
+                pygame.draw.circle(screen, (255, 255, 200), (mx, my), flash_size)
+                pygame.draw.circle(screen, (255, 200, 50), (mx, my), flash_size + 3)
+                # Directional flash
+                end_x = mx + math.cos(m['angle']) * flash_size * 2
+                end_y = my + math.sin(m['angle']) * flash_size * 2
+                pygame.draw.line(screen, (255, 255, 150), (mx, my), (int(end_x), int(end_y)), 4)
+
+    def draw_shadow(self, screen, x, y, size, camera_offset):
+        """Draw a shadow under a character."""
+        sx = int(x - camera_offset[0])
+        sy = int(y - camera_offset[1] + size * 0.7)
+        # Elliptical shadow
+        shadow_surface = pygame.Surface((size * 2, size), pygame.SRCALPHA)
+        pygame.draw.ellipse(shadow_surface, (0, 0, 0, 50), (0, 0, size * 2, size))
+        screen.blit(shadow_surface, (sx - size, sy - size // 2))
+
+
+# Global visual effects manager
+visual_effects = VisualEffects()
+
+
 class VirtualJoystick:
     """Virtual joystick for touch controls."""
     def __init__(self, x, y, radius=80):
@@ -2111,12 +2311,17 @@ class Zombie:
 
     def take_damage(self, damage, knockback_angle=None):
         self.health -= damage
+        # Add blood splatter effect
+        blood_amount = min(int(damage / 10) + 2, 8)
+        visual_effects.add_blood_splatter(self.x, self.y, blood_amount)
         if knockback_angle is not None:
             knockback_force = min(damage * 3, 200)
             self.knockback_vx = math.cos(knockback_angle) * knockback_force
             self.knockback_vy = math.sin(knockback_angle) * knockback_force
         if self.health <= 0:
             self.active = False
+            # Extra blood on death
+            visual_effects.add_blood_splatter(self.x, self.y, 10)
             return True  # Killed
         return False
 
@@ -2501,6 +2706,8 @@ class Player:
             return  # No damage when invincible
         self.health -= damage
         sound_manager.play('player_hurt')
+        # Screen shake when hit
+        visual_effects.shake_screen(min(damage * 0.5, 15))
         if self.health < 0:
             self.health = 0
 
@@ -2814,6 +3021,12 @@ class Player:
 
         # Muzzle flash particles (more intense)
         flash_intensity = min(weapon.damage / 30, 3)  # Bigger guns = bigger flash
+        flash_x = self.x + math.cos(self.angle) * (self.size + 15)
+        flash_y = self.y + math.sin(self.angle) * (self.size + 15)
+
+        # Add visual effect muzzle flash
+        visual_effects.add_muzzle_flash(flash_x, flash_y, self.angle, int(10 + flash_intensity * 5))
+
         for _ in range(int(5 * flash_intensity)):
             angle = self.angle + random.uniform(-0.5, 0.5)
             speed = random.uniform(100, 300) * flash_intensity
@@ -2821,8 +3034,7 @@ class Player:
             vy = math.sin(angle) * speed
             color = random.choice([YELLOW, ORANGE, (255, 200, 100)])
             game_world.particles.append(Particle(
-                self.x + math.cos(self.angle) * (self.size + 15),
-                self.y + math.sin(self.angle) * (self.size + 15),
+                flash_x, flash_y,
                 color, (vx, vy), random.uniform(0.05, 0.15), random.randint(3, 6)
             ))
 
@@ -3776,36 +3988,54 @@ class GameWorld:
         # World boundary
         pygame.draw.rect(screen, RED, (-camera_offset[0], -camera_offset[1], self.width, self.height), 5)
 
+        # Apply screen shake offset to camera
+        shake_offset = (
+            camera_offset[0] + visual_effects.screen_shake_offset[0],
+            camera_offset[1] + visual_effects.screen_shake_offset[1]
+        )
+
+        # Draw ground effects (debris, blood splatters) - uses shaken camera
+        visual_effects.draw_ground_effects(screen, shake_offset)
+
         # Draw heal zones
         for zone in self.heal_zones:
-            zone.draw(screen, camera_offset)
+            zone.draw(screen, shake_offset)
 
         # Draw walls
         for wall in self.walls:
-            wall.draw(screen, camera_offset)
+            wall.draw(screen, shake_offset)
 
         # Draw bunker
-        self.bunker.draw(screen, camera_offset)
+        self.bunker.draw(screen, shake_offset)
 
         # Draw pickups
         for pickup in self.pickups:
-            pickup.draw(screen, camera_offset)
+            pickup.draw(screen, shake_offset)
+
+        # Draw shadows under zombies and players
+        for zombie in self.zombies:
+            visual_effects.draw_shadow(screen, zombie.x, zombie.y, zombie.size, shake_offset)
+        for player in self.players:
+            visual_effects.draw_shadow(screen, player.x, player.y, player.size, shake_offset)
 
         # Draw zombies
         for zombie in self.zombies:
-            zombie.draw(screen, camera_offset)
+            zombie.draw(screen, shake_offset)
 
         # Draw players
         for player in self.players:
-            player.draw(screen, camera_offset)
+            player.draw(screen, shake_offset)
 
         # Draw bullets
         for bullet in self.bullets:
-            bullet.draw(screen, camera_offset)
+            bullet.draw(screen, shake_offset)
 
         # Draw particles
         for particle in self.particles:
-            particle.draw(screen, camera_offset)
+            particle.draw(screen, shake_offset)
+
+        # Draw visual effects (muzzle flashes, bullet trails, blood particles)
+        visual_effects.draw_effects(screen, shake_offset)
 
 
 class NetworkManager:
@@ -4653,6 +4883,9 @@ class Game:
                     self.weapon_popup_active = True
                     self.weapon_popup_weapon = weapon
                     self.weapon_popup_is_new = is_new
+
+            # Always update visual effects (even during popup)
+            visual_effects.update(dt)
 
             # Update camera to follow first alive player
             if self.local_players:
